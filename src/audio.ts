@@ -364,6 +364,11 @@ export class Sound {
     setTimeout(stop, dur * 1000);
   }
 
+  pourStop() {
+    this.pourNodes?.stop();
+    this.pourNodes = null;
+  }
+
   // 絞りが開く：息のような風の音と、ガラスをこする柔らかい音
   open() {
     if (!this.ctx || !this.enabled) return;
@@ -427,6 +432,90 @@ export class Sound {
     this.noise(t, 0.28, 2200, 0.7, 0.03, o, 'bandpass', 0.08);
   }
 
+  // こすくまくんの声。どうぶつ語のように1文字ずつ鳴らすが、
+  // 音程は五音音階にそろえ、角のない三角波＋母音の響き（フォルマント）で、低めにゆっくり。
+  voice(ch: string, i: number, last: boolean, ask: boolean) {
+    if (!this.ctx || !this.enabled) return;
+    const ctx = this.ctx;
+    const v = vowelOf(ch);
+    if (!v) return;
+    const t = ctx.currentTime + 0.005;
+    // D の五音音階（D E F# A B）から、文字ごとに近い音を選ぶ
+    const scale = [293.66, 329.63, 369.99, 440, 493.88];
+    const step = (ch.charCodeAt(0) * 7 + i * 3) % scale.length;
+    let f = scale[step] * 0.5;
+    if (last) f = ask ? scale[3] * 0.5 : scale[0] * 0.5 * 0.94;
+    const dur = last ? 0.16 : 0.085;
+    const o = this.out(Math.sin(i * 1.3) * 0.12, 0.9);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(0.16, t + 0.012);
+    env.gain.setTargetAtTime(0.0001, t + dur * 0.55, dur * 0.35);
+    env.connect(o);
+    const src = ctx.createOscillator();
+    src.type = 'triangle';
+    src.frequency.setValueAtTime(f * 1.03, t);
+    src.frequency.exponentialRampToValueAtTime(f * (last && ask ? 1.18 : 0.97), t + dur);
+    const vib = ctx.createOscillator();
+    vib.frequency.value = 5.5;
+    const vg = ctx.createGain();
+    vg.gain.value = f * 0.008;
+    vib.connect(vg).connect(src.frequency);
+    const [f1, f2] = FORMANT[v];
+    for (const [ff, q, g] of [
+      [f1, 6, 1.0],
+      [f2, 9, 0.55],
+    ] as const) {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = ff;
+      bp.Q.value = q;
+      const gg = ctx.createGain();
+      gg.gain.value = g * 2.2;
+      src.connect(bp).connect(gg).connect(env);
+    }
+    // 芯の音（ほんの少し）
+    const core = ctx.createGain();
+    core.gain.value = 0.18;
+    src.connect(core).connect(env);
+    src.start(t);
+    vib.start(t);
+    src.stop(t + dur + 0.25);
+    vib.stop(t + dur + 0.25);
+  }
+
+  // 「……」：口を閉じた低い「ん」
+  hum(len = 0.9) {
+    if (!this.ctx || !this.enabled) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.01;
+    const o = this.out(0, 0.9);
+    const src = ctx.createOscillator();
+    src.type = 'triangle';
+    src.frequency.setValueAtTime(146.8, t);
+    src.frequency.linearRampToValueAtTime(138.6, t + len);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    lp.Q.value = 2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.18, t + 0.12);
+    g.gain.setTargetAtTime(0.0001, t + len * 0.7, len * 0.2);
+    src.connect(lp).connect(g).connect(o);
+    src.start(t);
+    src.stop(t + len + 0.4);
+  }
+
+  // 片眼鏡を目に当てる：細いガラスの「ちん」
+  monocle() {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime + 0.01;
+    const o = this.out(0.3, 1.2);
+    this.glass(t, 4186, 0.035, o, 1.6);
+    this.glass(t + 0.09, 5274, 0.02, o, 1.4);
+  }
+
   // 判子：ぽん
   stamp() {
     if (!this.ctx || !this.enabled) return;
@@ -439,3 +528,30 @@ export class Sound {
 }
 
 export const sound = new Sound();
+
+// 母音ごとの響き（第1・第2フォルマント）
+const FORMANT: Record<string, [number, number]> = {
+  a: [800, 1250],
+  i: [320, 2300],
+  u: [360, 1350],
+  e: [480, 1900],
+  o: [480, 880],
+  n: [280, 1100],
+};
+const ROWS: [string, string][] = [
+  ['a', 'あかさたなはまやらわがざだばぱぁゃゎアカサタナハマヤラワガザダバパァャヮ'],
+  ['i', 'いきしちにひみりぎじぢびぴぃイキシチニヒミリギジヂビピィ'],
+  ['u', 'うくすつぬふむゆるぐずづぶぷぅゅウクスツヌフムユルグズヅブプゥュ'],
+  ['e', 'えけせてねへめれげぜでべぺぇエケセテネヘメレゲゼデベペェ'],
+  ['o', 'おこそとのほもよろをごぞどぼぽぉょオコソトノホモヨロヲゴゾドボポォョ'],
+  ['n', 'んン'],
+];
+const VOWEL = new Map<string, string>();
+for (const [v, s] of ROWS) for (const c of s) VOWEL.set(c, v);
+function vowelOf(ch: string): string | null {
+  if (VOWEL.has(ch)) return VOWEL.get(ch)!;
+  // 漢字は文字から母音を決める（毎回同じ字は同じ声）
+  if (/[一-鿿]/.test(ch)) return 'aiueo'[ch.charCodeAt(0) % 5];
+  if (/[a-zA-Z0-9]/.test(ch)) return 'aiueo'[ch.charCodeAt(0) % 5];
+  return null;
+}

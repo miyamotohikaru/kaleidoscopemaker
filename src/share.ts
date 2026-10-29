@@ -20,9 +20,10 @@ const q = (v: number, lo: number, hi: number) => Math.max(0, Math.min(255, Math.
 const dq = (b: number, lo: number, hi: number) => lo + (b / 255) * (hi - lo);
 
 export function encode(cell: Cell, r: Recipe): string {
-  const out: number[] = [1];
+  const out: number[] = [2];
   out.push(MIRRORS.indexOf(r.mirrors as 6) | (r.liquid << 2) | (r.tint << 4));
   out.push(q(((cell.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2), 0, Math.PI * 2));
+  out.push(q(cell.liquid ? cell.levelTarget : 0, 0, 1));
   const big = cell.bodies.filter((b) => !b.small && b.kind !== Kind.Photo).slice(0, 60);
   out.push(big.length);
   for (const b of big) {
@@ -42,10 +43,12 @@ export function decode(s: string, cell: Cell, rnd: () => number): Recipe | null 
   try {
     const u = unb64(s);
     let i = 0;
-    if (u[i++] !== 1) return null;
+    const ver = u[i++];
+    if (ver !== 1 && ver !== 2) return null;
     const m = u[i++];
     const rec: Recipe = { mirrors: MIRRORS[m & 3] ?? 8, liquid: Math.min(2, (m >> 2) & 3), tint: Math.min(TINTS.length - 1, (m >> 4) & 7), name: '' };
     cell.angle = dq(u[i++], 0, Math.PI * 2);
+    const level = ver >= 2 ? u[i++] / 255 : 1;
     const n = u[i++];
     cell.bodies = [];
     for (let k = 0; k < n; k++) {
@@ -80,7 +83,9 @@ export function decode(s: string, cell: Cell, rnd: () => number): Recipe | null 
     const len = u[i++];
     rec.name = new TextDecoder().decode(u.subarray(i, i + len));
     cell.liquid = LIQUIDS[rec.liquid];
-    cell.level = cell.levelTarget = 1;
+    cell.level = cell.levelTarget = level;
+    cell.flat = false;
+    cell.gs = 1;
     return rec;
   } catch {
     return null;

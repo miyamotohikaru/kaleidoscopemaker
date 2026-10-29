@@ -8,6 +8,8 @@ import { appraise } from './appraise';
 import { drawCard } from './card';
 import { decode, dust, encode } from './share';
 import { Kuma3D, preloadKuma } from './kuma3d';
+import { Pour3D } from './pour3d';
+import { deleteCert, fmtDate, listCerts, putCert, thumbOf, toBlob, type Cert } from './archive';
 
 type Stage = 'intro' | 'fill1' | 'fill2' | 'look' | 'name' | 'appraise';
 
@@ -44,14 +46,17 @@ const v: ViewState = {
   cy: 400,
   edge: 1,
   trail: 0.8,
-  bloom: 0.9,
+  bloom: 0.6,
   back: 0.02,
   tint: [1, 1, 1],
   span: 0.66,
   wedge: -Math.PI / 2,
+  guide: 0,
 };
 // 位置と大きさは目標へなめらかに寄せる
 const goal = { R: 300, cx: 200, cy: 400 };
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- 中身をつくる ----------
 function makeBody(it: Item, x: number, y: number, seed = rnd()): Body {
@@ -82,23 +87,26 @@ function smallCount() {
   return cell.bodies.length - bigCount();
 }
 
-function addItem(it: Item, x0?: number) {
+function addItem(it: Item, at?: [number, number]) {
+  const [x, y] = at ?? cell.dropPoint(rnd);
   if (it.pinch) {
     if (smallCount() >= MAX_SMALL) return say('もう、入らないかも。');
-    const [x, y] = cell.dropPoint(rnd);
     for (let i = 0; i < it.pinch; i++) {
-      const b = makeBody(it, x + (rnd() - 0.5) * 0.25, y + (rnd() - 0.5) * 0.12);
-      b.vx = (rnd() - 0.5) * 0.4;
-      b.vy = (rnd() - 0.5) * 0.2;
+      const a = rnd() * Math.PI * 2;
+      const r = Math.sqrt(rnd()) * 0.09;
+      const b = makeBody(it, x + Math.cos(a) * r, y + Math.sin(a) * r);
+      b.vx = Math.cos(a) * 0.25 * rnd();
+      b.vy = Math.sin(a) * 0.25 * rnd();
       cell.add(b);
     }
   } else {
     if (bigCount() >= MAX_BIG) return say('もう、いっぱい。');
-    const [x, y] = cell.dropPoint(rnd);
-    cell.add(makeBody(it, x0 ?? x, y));
-    if (it.kind === Kind.Charm && !cell.bodies.some((b, i) => b.kind === Kind.Charm && i < cell.bodies.length - 1)) say('それ、ぼく。');
+    const b = makeBody(it, x, y);
+    b.vx = b.vy = 0;
+    cell.add(b);
+    if (it.kind === Kind.Charm && cell.bodies.filter((o) => o.kind === Kind.Charm).length === 1) say('それ、ぼく。');
   }
-  sound.drop(it.kind, (it.size[0] + it.size[1]) / 2, (x0 ?? 0) * 0.5, cell.liquid && cell.level > 0.3 ? cell.liquid.id : null);
+  sound.drop(it.kind, (it.size[0] + it.size[1]) / 2, x * 0.6, cell.liquid && cell.level > 0.3 ? cell.liquid.id : null);
   updateCount();
 }
 
@@ -121,6 +129,8 @@ function sample(seed: number) {
   for (let i = 0; i < 90; i++) c.add(dust(r() < 0.6 ? 'gold' : 'rainbow', r));
   c.liquid = LIQUIDS[1];
   c.level = c.levelTarget = 1;
+  c.flat = false;
+  c.gs = 1;
   for (let i = 0; i < 240; i++) c.step(1 / 60, 0);
   return c;
 }
@@ -161,9 +171,59 @@ async function buildTray() {
   html.push(`<button class="slot drawer" type="button" data-drawer="mortar" aria-label="乳鉢で砕く"><i class="knob"></i>${DRAWER_MORTAR}<span>乳鉢</span></button>`);
   html.push(`<button class="slot drawer" type="button" data-drawer="photo" aria-label="写真を破片にする"><i class="knob"></i>${DRAWER_PHOTO}<span>写真</span></button>`);
   tray.innerHTML = html.join('');
+  // つまんで上へ引き出し、筒の好きな場所で離す
+  const pick = { id: -1, el: null as HTMLElement | null, sx: 0, sy: 0, ghost: null as HTMLImageElement | null, it: null as Item | null };
+  let noClick = 0;
+  tray.addEventListener('pointerdown', (e) => {
+    const el = (e.target as HTMLElement).closest('.slot[data-id]') as HTMLElement | null;
+    if (!el) return;
+    Object.assign(pick, { id: e.pointerId, el, sx: e.clientX, sy: e.clientY, ghost: null, it: SHELF.find((s) => s.id === el.dataset.id) ?? null });
+  });
+  tray.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== pick.id || !pick.el || !pick.it) return;
+    const dx = e.clientX - pick.sx;
+    const dy = e.clientY - pick.sy;
+    if (!pick.ghost) {
+      if (-dy < 12 || Math.abs(dy) < Math.abs(dx)) return;
+      sound.unlock();
+      sound.slide();
+      const g = document.createElement('img');
+      g.className = 'ghost';
+      g.src = pick.el.querySelector('img')!.src;
+      document.body.appendChild(g);
+      pick.ghost = g;
+      tray.setPointerCapture(e.pointerId);
+    }
+    const over = Math.hypot(e.clientX - v.cx, e.clientY - v.cy) < v.R * 0.98;
+    // 筒の上では、実際に入る大きさまで縮む
+    const sz = over ? Math.max(14, ((pick.it.size[0] + pick.it.size[1]) / 2) * v.R * 2 * (pick.it.pinch ? 6 : 1.3)) : 64;
+    pick.ghost.style.width = pick.ghost.style.height = sz + 'px';
+    pick.ghost.style.transform = `translate(${e.clientX - sz / 2}px, ${e.clientY - sz / 2 - (over ? 0 : 30)}px)`;
+    pick.ghost.classList.toggle('over', over);
+  });
+  const drop = (e: PointerEvent) => {
+    if (e.pointerId !== pick.id) return;
+    const g = pick.ghost;
+    pick.id = -1;
+    if (!g || !pick.it) return;
+    noClick = performance.now();
+    const over = Math.hypot(e.clientX - v.cx, e.clientY - v.cy) < v.R * 0.95;
+    if (over && e.type === 'pointerup') {
+      const [x, y] = toCell(e.clientX, e.clientY);
+      const d = Math.hypot(x, y);
+      const lim = 0.92 - pick.it.size[1];
+      addItem(pick.it, d > lim ? [(x * lim) / d, (y * lim) / d] : [x, y]);
+      g.remove();
+    } else {
+      g.classList.add('back');
+      setTimeout(() => g.remove(), 300);
+    }
+  };
+  tray.addEventListener('pointerup', drop);
+  tray.addEventListener('pointercancel', drop);
   tray.addEventListener('click', (e) => {
     const el = (e.target as HTMLElement).closest('.slot') as HTMLElement | null;
-    if (!el) return;
+    if (!el || performance.now() - noClick < 400) return;
     sound.unlock();
     if (el.dataset.drawer === 'mortar') return openMortar();
     if (el.dataset.drawer === 'photo') {
@@ -213,6 +273,20 @@ $<HTMLInputElement>('#photo').addEventListener('change', async (e) => {
 
 // ---------- 乳鉢 ----------
 const mortar = new Mortar($<HTMLCanvasElement>('#mortar-cv'));
+const spriteCache = new Map<GemName, { crystal: HTMLImageElement; shards: HTMLImageElement[] }>();
+mortar.getSprites = (color) => {
+  const hit = spriteCache.get(color);
+  if (hit) return hit;
+  const img = (src: string) => Object.assign(new Image(), { src });
+  const mk = (seed: number, r: number) => {
+    const b = makeBody({ id: 'm', label: '', kind: Kind.Mineral, color, size: [r, r], density: 2.6 }, 0, 0, seed);
+    b.a = 0;
+    return img(R.tile([b], r * 1.15, 192));
+  };
+  const out = { crystal: mk(0.37, 0.3), shards: [0.11, 0.53, 0.71, 0.92].map((sd) => mk(sd, 0.2)) };
+  spriteCache.set(color, out);
+  return out;
+};
 let stone: GemName = 'sapphire';
 function buildStones() {
   $('#stones').innerHTML = MORTAR_STONES.map(
@@ -296,16 +370,11 @@ $('#liquids').addEventListener('click', (e) => {
   sound.unlock();
   const i = Number(el.dataset.i);
   document.querySelectorAll('.liquid').forEach((s) => s.setAttribute('aria-checked', String(s === el)));
-  const was = liquidIdx;
   liquidIdx = i;
   const L = LIQUIDS[i];
   cell.liquid = L;
-  if (was < 0) {
-    cell.level = 0;
-    cell.levelTarget = 1;
-  }
-  sound.pour(L.id, was < 0 ? (L.id === 'honey' ? 4 : 2.6) : 1.2);
-  say(({ water: 'さらさら。', oil: 'とろっと。', honey: '……ゆっくりだね。' } as const)[L.id]);
+  sound.tick();
+  say(cell.levelTarget > 0.02 ? 'まぜるの？　……いいけど。' : '筒の上を、長押しして注いで。');
   setNext();
 });
 $('#tints').addEventListener('click', (e) => {
@@ -316,12 +385,24 @@ $('#tints').addEventListener('click', (e) => {
   sound.tick();
 });
 
+const KANJI = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+function updateAmount() {
+  const el = $('#amount');
+  const l = cell.liquid ? cell.levelTarget : 0;
+  if (l < 0.03) el.textContent = '筒の上を長押しすると、注げます';
+  else if (l >= 0.995) el.textContent = 'なみなみ';
+  else el.textContent = `いま ${KANJI[Math.max(1, Math.min(9, Math.round(l * 10)))]}分目`;
+}
+
 // ---------- 鏡の数 ----------
 document.querySelectorAll<HTMLButtonElement>('[data-mirrors]').forEach((b) =>
   b.addEventListener('click', () => {
+    sound.unlock();
     mirrors = Number(b.dataset.mirrors);
     document.querySelectorAll('[data-mirrors]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
     sound.tick();
+    guide = 3.2;
+    say(MIRROR_LINES[mirrors], 3400);
   }),
 );
 $('#undo').addEventListener('click', () => {
@@ -335,14 +416,51 @@ $('#undo').addEventListener('click', () => {
   updateCount();
 });
 
+const MIRROR_LINES: Record<number, string> = {
+  6: '6つに折り返す。ひとつずつが、大きく映るよ。',
+  8: '8つ。いちばん、まとまりがいいと思う。',
+  12: '12。細かくて、くらくらするやつ。',
+};
+let guide = 0; // 鏡の線を筒に重ねて見せる残り時間
+
 // ---------- こすくまくんのひとこと ----------
 let sayTimer = 0;
-function say(text: string, ms = 2600) {
+let sayToken = 0;
+async function say(text: string, ms = 2600) {
   const el = $('#say');
-  el.querySelector('p')!.textContent = text;
-  el.classList.add('show');
+  const p = el.querySelector('p')!;
+  const my = ++sayToken;
   clearTimeout(sayTimer);
+  p.textContent = '';
+  el.classList.add('show');
+  await typeOut(p, text, () => my === sayToken);
+  if (my !== sayToken) return;
   sayTimer = window.setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// 1文字ずつ出し、文字ごとに声を鳴らす（どうぶつ語ふう）
+async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () => true) {
+  const chars = [...text];
+  const ask = /[？?]\s*$/.test(text);
+  const lastVoiced = chars.map((c, i) => (/[\s、。，．！？…「」]/.test(c) ? -1 : i)).filter((i) => i >= 0).pop() ?? -1;
+  let shown = '';
+  for (let i = 0; i < chars.length; i++) {
+    if (!alive()) return;
+    const c = chars[i];
+    shown += c;
+    el.textContent = shown;
+    if (c === '…') {
+      if (chars[i - 1] !== '…') sound.hum(0.5);
+      await wait(150);
+      continue;
+    }
+    if (c === '、' || c === '。' || c === '\n' || c === '？') {
+      await wait(c === '、' || c === '\n' ? 200 : 260);
+      continue;
+    }
+    sound.voice(c, i, i === lastVoiced, ask);
+    await wait(i === lastVoiced ? 160 : 105);
+  }
 }
 
 // ---------- 段の切り替え ----------
@@ -357,7 +475,7 @@ function setNext() {
   const [n, l] = shared && stage === 'look' ? ['i', '自分もつくる'] : NEXT[stage] ?? ['', ''];
   $('#next-num').textContent = n;
   $('#next-label').textContent = l;
-  $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && liquidIdx < 0;
+  $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && (!cell.liquid || cell.levelTarget < 0.05);
 }
 function setStage(s: Stage) {
   stage = s;
@@ -428,6 +546,8 @@ const easeIO = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2
 const easeO = (t: number) => 1 - Math.pow(1 - t, 3);
 
 let auto = 0; // 自動で回る残り時間
+let tilt = 0;
+let pour3d: Pour3D | null = null;
 async function toWindow() {
   body.classList.add('busy');
   await tween(450, (t) => (v.fade = 1 - t));
@@ -453,20 +573,22 @@ async function toWindow() {
 async function toLook() {
   body.classList.add('busy');
   sound.close();
-  if (cell.liquid) cell.levelTarget = 1;
+  stopPour();
   const R0 = v.R;
   await tween(800, (t) => {
     v.fade = 1 - t;
     goal.R = v.R = R0 * (1 + t * 0.7);
   }, easeIO);
-  cell.level = cell.levelTarget = cell.liquid ? 1 : 0;
+  cell.level = cell.levelTarget;
+  // 筒を立てて目に当てる：ここから重力
+  cell.flat = false;
   v.mode = 1;
   v.ring = 0;
   v.mirrors = mirrors;
   v.back = 0.02;
-  v.bloom = 0.75;
+  v.bloom = 0.55;
   v.edge = 1;
-  v.trail = 0.5;
+  v.trail = 0.3;
   v.iris = 0;
   v.fade = 1;
   setStage('look');
@@ -475,29 +597,73 @@ async function toLook() {
   sound.setMuffle(0.72);
   sound.open();
   auto = 5.5;
-  cell.lift(rnd);
   await tween(2800, (t) => (v.iris = t * 1.08), easeIO);
   body.classList.remove('busy');
 }
 
-// ---------- 回す ----------
+// ---------- 指で触る ----------
+// 入れる＝筒の中をかき混ぜる／満たす＝長押しで注ぐ／のぞく＝縁をなぞって回す
 const drag = { on: false, id: -1, last: 0, t: 0, vel: 0 };
 let angVel = 0;
+const finger = { on: false, id: -1, x: 0, y: 0, vx: 0, vy: 0, t: 0 };
+const pour = { on: false, id: -1, x: 0, amt: 0 };
 function ang(e: PointerEvent) {
   return Math.atan2(-(e.clientY - v.cy), e.clientX - v.cx);
 }
+function toCell(cx: number, cy: number): [number, number] {
+  const x = (cx - v.cx) / v.R;
+  const y = -(cy - v.cy) / v.R;
+  const c = Math.cos(-cell.angle);
+  const s = Math.sin(-cell.angle);
+  return [x * c - y * s, x * s + y * c];
+}
+const POUR_RATE: Record<string, number> = { water: 0.2, oil: 0.15, honey: 0.08 };
 canvas.addEventListener('pointerdown', (e) => {
   sound.unlock();
   if (body.classList.contains('busy')) return;
+  canvas.setPointerCapture(e.pointerId);
+  if (stage === 'fill1') {
+    const [x, y] = toCell(e.clientX, e.clientY);
+    Object.assign(finger, { on: true, id: e.pointerId, x, y, vx: 0, vy: 0, t: performance.now() });
+    return;
+  }
+  if (stage === 'fill2') {
+    if (!cell.liquid) {
+      say('先に、瓶をえらんで。');
+      return;
+    }
+    if (cell.level >= 0.999) {
+      say('もう、いっぱい。');
+      return;
+    }
+    Object.assign(pour, { on: true, id: e.pointerId, x: pourX(e.clientX) });
+    sound.pour(cell.liquid.id, 600);
+    return;
+  }
   drag.on = true;
   drag.id = e.pointerId;
   drag.last = ang(e);
   drag.t = performance.now();
   drag.vel = 0;
-  canvas.setPointerCapture(e.pointerId);
   auto = 0;
 });
+function pourX(clientX: number) {
+  return Math.max(-0.62, Math.min(0.62, (clientX - v.cx) / v.R));
+}
 canvas.addEventListener('pointermove', (e) => {
+  if (finger.on && e.pointerId === finger.id) {
+    const [x, y] = toCell(e.clientX, e.clientY);
+    const now = performance.now();
+    const dt = Math.max(8, now - finger.t) / 1000;
+    finger.vx = finger.vx * 0.5 + ((x - finger.x) / dt) * 0.5;
+    finger.vy = finger.vy * 0.5 + ((y - finger.y) / dt) * 0.5;
+    Object.assign(finger, { x, y, t: now });
+    return;
+  }
+  if (pour.on && e.pointerId === pour.id) {
+    pour.x = pourX(e.clientX);
+    return;
+  }
   if (!drag.on || e.pointerId !== drag.id) return;
   const a = ang(e);
   let d = a - drag.last;
@@ -513,7 +679,15 @@ canvas.addEventListener('pointermove', (e) => {
   drag.last = a;
   drag.t = now;
 });
+function stopPour() {
+  if (!pour.on) return;
+  pour.on = false;
+  sound.pourStop();
+  setNext();
+}
 const release = (e: PointerEvent) => {
+  if (e.pointerId === finger.id) finger.on = false;
+  if (e.pointerId === pour.id) stopPour();
   if (e.pointerId !== drag.id) return;
   drag.on = false;
   angVel = Math.max(-2.5, Math.min(2.5, drag.vel));
@@ -556,7 +730,7 @@ $('#tilt').addEventListener('click', async () => {
 let kuma: Kuma3D | null = null;
 let lastCard: HTMLCanvasElement | null = null;
 let lastName = '';
-const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+let lastCode = '';
 
 async function doAppraise() {
   const input = $<HTMLInputElement>('#name');
@@ -573,6 +747,8 @@ async function doAppraise() {
   const acts = $('#actions');
   cert.classList.remove('show');
   acts.classList.remove('show');
+  $('#kept').textContent = '';
+  sound.setMuffle(0);
   say2.classList.remove('show');
   ap.hidden = false;
   ap.scrollTop = 0;
@@ -585,26 +761,42 @@ async function doAppraise() {
   const scope = R.snapshot(cell, v, 1024);
   const cardP = drawCard(scope, name, verdict, DOMAIN);
   await wait(500);
-  say2.textContent = 'ちょっと貸して。';
-  say2.classList.add('show');
+  await speak(say2, 'ちょっと貸して。');
+  sound.monocle();
   await tween(900, (t) => kuma && (kuma.lean = t), easeIO);
-  await wait(700);
+  await wait(500);
   say2.classList.remove('show');
   await wait(350);
   say2.textContent = '……';
   say2.classList.add('show');
-  await wait(1300);
+  sound.hum(1.1);
+  await wait(1500);
   const card = await cardP;
   lastCard = card;
+  lastCode = code;
   $<HTMLImageElement>('#cert-img').src = card.toDataURL('image/jpeg', 0.92);
   await tween(600, (t) => kuma && (kuma.lean = 1 - t), easeIO);
   say2.classList.remove('show');
   cert.classList.add('show');
   sound.stamp();
-  await wait(400);
-  say2.textContent = verdict.line;
-  say2.classList.add('show');
+  await wait(500);
+  await speak(say2, verdict.line);
   acts.classList.add('show');
+  // 鑑定書を一覧にしまう
+  try {
+    const [blob, thumb] = await Promise.all([toBlob(card), thumbOf(card)]);
+    await putCert({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, rankName: verdict.rankName, rank: verdict.rank, line: verdict.line, date: Date.now(), code, card: blob, thumb });
+    $('#kept').textContent = '鑑定書を、一覧にしまいました。';
+    refreshArchCount();
+  } catch {
+    $('#kept').textContent = 'この端末には、しまえませんでした。画像を保存してください。';
+  }
+}
+
+async function speak(el: HTMLElement, text: string) {
+  el.textContent = '';
+  el.classList.add('show');
+  await typeOut(el, text);
 }
 
 function closeAppraisal() {
@@ -612,16 +804,13 @@ function closeAppraisal() {
   kuma?.stop();
 }
 
-$('#post').addEventListener('click', () => {
-  const url = location.href.split('#')[0] + location.hash;
-  const text = `「${lastName}」をのぞきました。\n#万華鏡メーカー`;
+function postX(name: string, code: string) {
+  const url = `${location.origin}${location.pathname}#k=${code}`;
+  const text = `「${name}」をのぞきました。\n#万華鏡メーカー`;
   window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank', 'noopener');
-});
-$('#save').addEventListener('click', async () => {
-  if (!lastCard) return;
-  const blob: Blob | null = await new Promise((r) => lastCard!.toBlob(r, 'image/png'));
-  if (!blob) return;
-  const file = new File([blob], `kaleidoscope-${Date.now()}.png`, { type: 'image/png' });
+}
+async function saveImage(blob: Blob, name: string) {
+  const file = new File([blob], `${name || 'kaleidoscope'}.${blob.type === 'image/png' ? 'png' : 'jpg'}`, { type: blob.type });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
   if (nav.canShare?.({ files: [file] })) {
     try {
@@ -636,9 +825,104 @@ $('#save').addEventListener('click', async () => {
   a.download = file.name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+$('#post').addEventListener('click', () => postX(lastName, lastCode));
+$('#save').addEventListener('click', async () => {
+  if (lastCard) saveImage(await toBlob(lastCard, 'image/png'), lastName);
 });
+
+// ---------- 鑑定書一覧 ----------
+let certs: Cert[] = [];
+let current: Cert | null = null;
+const urls: string[] = [];
+async function refreshArchCount() {
+  certs = await listCerts();
+  document.querySelectorAll('.arch-n').forEach((el) => (el.textContent = certs.length ? String(certs.length) : ''));
+  $('#intro-arch').hidden = certs.length === 0;
+}
+async function openArchive() {
+  sound.unlock();
+  sound.slide();
+  await refreshArchCount();
+  urls.splice(0).forEach((u) => URL.revokeObjectURL(u));
+  $('#arch-count').textContent = certs.length ? `${certs.length} 枚` : '';
+  $('#arch-empty').hidden = certs.length > 0;
+  $('#arch-grid').innerHTML = certs
+    .map((c, i) => {
+      const u = URL.createObjectURL(c.thumb);
+      urls.push(u);
+      return `<li class="arch-item"><button type="button" data-i="${i}"><img src="${u}" alt="" loading="lazy" /><b>「${escapeHtml(c.name)}」</b><span><em>${escapeHtml(c.rankName)}</em>${fmtDate(c.date)}</span></button></li>`;
+    })
+    .join('');
+  $('#archive').hidden = false;
+  $('#archive').scrollTop = 0;
+}
+$('#arch-grid').addEventListener('click', (e) => {
+  const el = (e.target as HTMLElement).closest('button[data-i]') as HTMLElement | null;
+  if (!el) return;
+  current = certs[Number(el.dataset.i)];
+  if (!current) return;
+  sound.tick();
+  const img = $<HTMLImageElement>('#detail-img');
+  if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  img.src = URL.createObjectURL(current.card);
+  $('#detail-date').textContent = fmtDate(current.date);
+  $('#detail-del').classList.remove('armed');
+  $('#detail-del').textContent = '手放す';
+  $('#arch-detail').hidden = false;
+  $('#arch-detail').scrollTop = 0;
+});
+$('#intro-arch').addEventListener('click', openArchive);
+$('#ap-arch').addEventListener('click', openArchive);
+$('#arch-close').addEventListener('click', () => {
+  sound.tick();
+  $('#archive').hidden = true;
+});
+$('#detail-back').addEventListener('click', () => {
+  sound.tick();
+  $('#arch-detail').hidden = true;
+});
+$('#detail-save').addEventListener('click', () => current && saveImage(current.card, current.name));
+$('#detail-post').addEventListener('click', () => current && postX(current.name, current.code));
+$('#detail-del').addEventListener('click', async () => {
+  const b = $('#detail-del');
+  if (!current) return;
+  // 1回目は確かめるだけ（ブラウザの確認窓は使わない）
+  if (!b.classList.contains('armed')) {
+    b.classList.add('armed');
+    b.textContent = 'もう一度押すと手放します';
+    return;
+  }
+  await deleteCert(current.id);
+  current = null;
+  $('#arch-detail').hidden = true;
+  openArchive();
+});
+$('#detail-look').addEventListener('click', async () => {
+  if (!current) return;
+  const c = new Cell();
+  const rec = decode(current.code, c, rnd);
+  if (!rec) return;
+  sound.unlock();
+  $('#arch-detail').hidden = true;
+  $('#archive').hidden = true;
+  closeAppraisal();
+  cell = c;
+  mirrors = rec.mirrors;
+  tintIdx = rec.tint;
+  liquidIdx = rec.liquid;
+  shared = null;
+  lastName = rec.name;
+  lastCode = current.code;
+  $<HTMLInputElement>('#name').value = rec.name;
+  history.replaceState(null, '', `#k=${current.code}`);
+  document.querySelectorAll('[data-mirrors]').forEach((x) => x.setAttribute('aria-checked', String(Number((x as HTMLElement).dataset.mirrors) === mirrors)));
+  await openScope();
+});
+
 $('#again').addEventListener('click', () => {
   closeAppraisal();
+  sound.setMuffle(0.72);
   setStage('look');
 });
 $('#restart').addEventListener('click', () => {
@@ -659,10 +943,19 @@ $('#start').addEventListener('click', () => {
   }
   toWindow();
 });
-$('#peek').addEventListener('click', async () => {
-  sound.unlock();
+// 万華鏡として、のぞく（共有・一覧から）
+async function openScope() {
   body.classList.add('busy');
-  await tween(500, (t) => (v.iris = 1.3 - t * 1.3), easeIO);
+  if (v.mode === 1 && stage !== 'appraise') await tween(500, (t) => (v.iris = Math.max(0, v.iris * (1 - t))), easeIO);
+  else await tween(400, (t) => (v.fade = 1 - t));
+  v.mode = 1;
+  v.ring = 0;
+  v.back = 0.02;
+  v.bloom = 0.55;
+  v.edge = 1;
+  v.trail = 0.3;
+  v.iris = 0;
+  v.fade = 1;
   setStage('look');
   layout();
   Object.assign(v, { R: goal.R, cx: goal.cx, cy: goal.cy });
@@ -671,6 +964,10 @@ $('#peek').addEventListener('click', async () => {
   auto = 5.5;
   await tween(2800, (t) => (v.iris = t * 1.08), easeIO);
   body.classList.remove('busy');
+}
+$('#peek').addEventListener('click', () => {
+  sound.unlock();
+  openScope();
 });
 $('#next').addEventListener('click', () => {
   sound.unlock();
@@ -683,6 +980,7 @@ $('#next').addEventListener('click', () => {
   }
   if (stage === 'fill1') {
     setStage('fill2');
+    updateAmount();
     say(cell.bodies.length ? 'なにで満たす？' : '……からっぽだけど、いいの？');
   } else if (stage === 'fill2') toLook();
   else if (stage === 'look') {
@@ -710,6 +1008,8 @@ document.querySelectorAll<HTMLElement>('.steps li').forEach((li, i) =>
       v.back = 0.028;
       v.bloom = 0.7;
       cell.angle = 0;
+      cell.flat = true;
+      cell.gs = 0;
       setStage(to);
     } else setStage(to);
   }),
@@ -753,6 +1053,24 @@ function frame(now: number) {
   let dg = g - cell.gdir;
   dg = Math.atan2(Math.sin(dg), Math.cos(dg));
   cell.gdir += dg * Math.min(1, dt * 5);
+  guide = Math.max(0, guide - dt);
+  v.guide = Math.min(1, guide / 0.6) * (stage === 'fill1' ? 1 : 0);
+  // 重力：寝かせている間は 0、立てたらゆっくり効いてくる
+  cell.gs = cell.flat ? 0 : Math.min(1, cell.gs + dt * 0.6);
+  // 指と、注ぐ流れが粒を押す
+  cell.pokes.length = 0;
+  if (finger.on) cell.pokes.push({ x: finger.x, y: finger.y, vx: finger.vx, vy: finger.vy, r: 0.07, k: 14 });
+  if (pour.on && cell.liquid) {
+    const L = cell.liquid;
+    cell.levelTarget = Math.min(1, cell.levelTarget + POUR_RATE[L.id] * dt);
+    cell.level = cell.levelTarget;
+    cell.pokes.push({ x: pour.x, y: 0.05, vx: 0, vy: 0, r: 0.12 + (L.id === 'honey' ? 0.06 : 0), k: L.id === 'honey' ? 3 : 7 });
+    if (cell.levelTarget >= 1) {
+      stopPour();
+      say('いっぱい。');
+    }
+    updateAmount();
+  }
   // 物理（120Hz）
   acc += dt;
   const av = drag.on ? drag.vel : angVel;
@@ -804,13 +1122,33 @@ function frame(now: number) {
   v.mirrors = stage === 'intro' ? 8 : mirrors;
   const L = cell.liquid;
   R.drawChamber(cell, v, L ? { film: L.film, wobble: L.wobble } : null);
-  R.present(cell, v);
+  // 満たす段だけ、筒を立体にして斜めから見る
+  tilt += ((stage === 'fill2' && v.mode === 0 ? 1 : 0) - tilt) * Math.min(1, dt * 2.2);
+  if (v.mode === 0 && (stage === 'fill2' || tilt > 0.003)) {
+    pour3d ??= new Pour3D(R.gl, R.chamberRT.texture);
+    pour3d.update(dt, {
+      tilt: easeIO(Math.min(1, tilt)),
+      level: cell.liquid ? cell.level : 0,
+      liquid: cell.liquid?.id ?? null,
+      tint: TINTS[tintIdx].rgb,
+      pouring: pour.on,
+      pourX: pour.on ? pour.x : 0.2,
+      time: R.time,
+      W: innerWidth,
+      Hh: innerHeight,
+      R: v.R,
+      cx: v.cx,
+      cy: v.cy,
+    });
+    R.present3d(v, pour3d.scene, pour3d.cam);
+  } else R.present(cell, v);
   if (v.mode === 0) placeEngrave();
   requestAnimationFrame(frame);
 }
 
 // ---------- はじめ ----------
 function boot() {
+  refreshArchCount();
   buildLiquids();
   buildTray();
   preloadKuma();
@@ -842,10 +1180,12 @@ function boot() {
     if (dev === 'og') v.mirrors = 8;
     v.ring = v.mode ? 0 : 1;
     v.edge = v.mode;
-    v.trail = v.mode * 0.5;
+    v.trail = v.mode * 0.3;
+    v.bloom = v.mode ? 0.55 : 0.7;
     if (dev === 'og') body.classList.add('og');
     v.back = v.mode ? 0.02 : 0.028;
-    if (v.mode) cell.lift(rnd);
+    cell.flat = !v.mode;
+    cell.gs = v.mode ? 1 : 0;
     v.iris = 1.08;
     if (dev === 'fill1') cell.liquid = null;
     if (dev !== 'fill1') liquidIdx = 1;

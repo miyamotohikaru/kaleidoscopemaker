@@ -7,7 +7,7 @@ import type { Body, Cell } from './sim';
 import * as S from './shaders';
 
 const MAX = 900;
-const CH = 1024;
+const CH = 1536;
 
 export interface ViewState {
   mode: number; // 0 窓 / 1 万華鏡
@@ -25,15 +25,16 @@ export interface ViewState {
   tint: [number, number, number];
   span: number;
   wedge: number; // 鏡が向く方向（画面）
+  guide: number;
 }
 
-function rt(w: number, h: number, type: THREE.TextureDataType) {
+function rt(w: number, h: number, type: THREE.TextureDataType, depth = false) {
   return new THREE.WebGLRenderTarget(w, h, {
     type,
     format: THREE.RGBAFormat,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
-    depthBuffer: false,
+    depthBuffer: depth,
     generateMipmaps: false,
   });
 }
@@ -47,7 +48,7 @@ class Post {
   c2: THREE.WebGLRenderTarget;
   flip = 0;
   constructor(public w: number, public h: number, type: THREE.TextureDataType) {
-    this.scene = rt(w, h, type);
+    this.scene = rt(w, h, type, true);
     this.hist = [rt(w, h, type), rt(w, h, type)];
     const w4 = Math.max(1, w >> 2), h4 = Math.max(1, h >> 2);
     const w8 = Math.max(1, w >> 3), h8 = Math.max(1, h >> 3);
@@ -120,6 +121,7 @@ export class Renderer {
       uFilm: { value: 0 },
       uWobble: { value: 0 },
       uHasLiquid: { value: 0 },
+      uNet: { value: 0 },
     });
     this.mats.view = mk(S.viewFrag, {
       uChamber: { value: null },
@@ -136,6 +138,7 @@ export class Renderer {
       uSpan: { value: 1 },
       uRing: { value: 1 },
       uStretch: { value: 1 },
+      uGuide: { value: 0 },
     });
     this.mats.edge = mk(S.edgeFrag, {
       uScene: { value: null },
@@ -292,13 +295,14 @@ export class Renderer {
     const L = this.mats.liquid.uniforms;
     L.uBeads.value = this.beadRT.texture;
     L.uTime.value = this.time;
-    L.uLevel.value = cell.level;
+    L.uLevel.value = cell.flat ? (cell.level > 0.02 ? 1 : 0) : cell.level;
     const g = cell.gdir - cell.angle;
     (L.uG.value as THREE.Vector2).set(Math.cos(g), Math.sin(g));
     (L.uTint.value as THREE.Vector3).set(...v.tint);
     L.uFilm.value = liquid?.film ?? 0;
     L.uWobble.value = liquid?.wobble ?? 0;
     L.uHasLiquid.value = cell.liquid ? 1 : 0;
+    L.uNet.value = v.mode;
     this.pass(this.mats.liquid, this.chamberRT);
     gl.setRenderTarget(this.chamberRT);
     gl.render(this.charmScene, this.cam);
@@ -322,9 +326,24 @@ export class Renderer {
     V.uFade.value = v.fade;
     V.uSpan.value = v.span;
     V.uRing.value = v.ring;
-    V.uStretch.value = Math.min(2.4, 0.95 / (Math.PI / v.mirrors));
+    V.uGuide.value = v.guide;
+    V.uStretch.value = Math.min(1.9, 0.8 / (Math.PI / v.mirrors));
     this.pass(this.mats.view, post.scene);
+    this.postChain(v, post, target, scale);
+  }
 
+  // 満たす：立体の筒を描いてから、同じ仕上げを通す
+  present3d(v: ViewState, scene: THREE.Scene, cam: THREE.Camera) {
+    const post = this.post;
+    this.gl.setRenderTarget(post.scene);
+    this.gl.clear(true, true, false);
+    this.gl.render(scene, cam);
+    this.postChain(v, post, null, this.dpr);
+  }
+
+  private postChain(v: ViewState, post: Post, target: THREE.WebGLRenderTarget | null, scale: number) {
+    const W = post.w;
+    const H = post.h;
     const E = this.mats.edge.uniforms;
     const src = post.hist[post.flip];
     const dst = post.hist[1 - post.flip];

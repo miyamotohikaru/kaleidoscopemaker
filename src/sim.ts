@@ -44,6 +44,11 @@ export class Cell {
   time = 0;
   hits: Hit[] = [];
   stir = 0; // 回したときの流れ
+  // 作っている間は筒を寝かせて真上から見ている（重力は奥向き＝画面の中では動かない）。
+  // のぞくときに筒を立てるので、そこから重力がかかる。
+  flat = true;
+  gs = 0; // 重力の効き 0..1
+  pokes: { x: number; y: number; vx: number; vy: number; r: number; k: number }[] = [];
 
   get bigCount() {
     return this.bodies.filter((b) => !b.small).length;
@@ -61,6 +66,7 @@ export class Cell {
 
   private wetAt(x: number, y: number, gx: number, gy: number) {
     if (!this.liquid) return false;
+    if (this.flat) return this.level > 0.02;
     if (this.level >= 0.999) return true;
     const up = -(x * gx + y * gy); // 上向きの高さ -1..1
     return up < -1 + 2 * this.level;
@@ -90,6 +96,20 @@ export class Cell {
       } else {
         g = AIR_G * (b.small ? 0.35 : 1);
         drag = b.small ? 3.5 : 0.25;
+      }
+      // 寝かせている間は、ガラスの底をすべる摩擦だけ
+      if (this.flat) drag = Math.max(drag, wet ? drag : b.small ? 6 : 4.5);
+      g *= this.gs;
+      for (const pk of this.pokes) {
+        const dx = b.x - pk.x;
+        const dy = b.y - pk.y;
+        const d = Math.hypot(dx, dy);
+        const rr = pk.r + b.r;
+        if (d < rr && d > 1e-5) {
+          const f = (1 - d / rr) * pk.k;
+          b.vx += (dx / d) * f * dt + pk.vx * f * dt * 4;
+          b.vy += (dy / d) * f * dt + pk.vy * f * dt * 4;
+        }
       }
       b.vx += gx * g * dt;
       b.vy += gy * g * dt;
@@ -195,6 +215,11 @@ export class Cell {
 
   // 落ちてきたばかりの粒を筒の上の方に置く
   dropPoint(rnd: () => number): [number, number] {
+    if (this.flat) {
+      const a = rnd() * Math.PI * 2;
+      const r = Math.sqrt(rnd()) * 0.6;
+      return [Math.cos(a) * r, Math.sin(a) * r];
+    }
     const g = this.gdir - this.angle;
     const ux = -Math.cos(g);
     const uy = -Math.sin(g);

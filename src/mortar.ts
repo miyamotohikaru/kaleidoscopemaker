@@ -1,8 +1,14 @@
-// 乳鉢：宝石を指でごりごり砕いて、きらきらの粉にする。
-// 粗いうちは「かけら」、細かくなると「粉」として筒に入る。
+// 乳鉢：黒い石の鉢で宝石を指でごりごり砕く。
+// 鉢とすりこぎは Blender で描いた絵（真上から）。宝石とかけらは筒の中と同じシェーダーで描いた絵を使う。
+// 砕いた粉は鉢の底に擦りつけたように溜まっていき、光がちらちら瞬く。
 
 import { GEM, type GemName } from './catalog';
 import { sound } from './audio';
+
+export interface Sprites {
+  crystal: HTMLImageElement;
+  shards: HTMLImageElement[];
+}
 
 interface Bit {
   x: number;
@@ -11,9 +17,14 @@ interface Bit {
   vy: number;
   r: number;
   a: number;
-  tw: number;
-  sides: number;
-  shard: boolean;
+  va: number;
+  img: number;
+}
+interface Spark {
+  x: number;
+  y: number;
+  ph: number;
+  sp: number;
 }
 
 export interface MortarResult {
@@ -22,8 +33,19 @@ export interface MortarResult {
   dust: number;
 }
 
-const css = (c: readonly number[], k = 1, a = 1) =>
-  `rgba(${Math.round(Math.min(1, Math.pow(c[0] * k, 1 / 2.2)) * 255)},${Math.round(Math.min(1, Math.pow(c[1] * k, 1 / 2.2)) * 255)},${Math.round(Math.min(1, Math.pow(c[2] * k, 1 / 2.2)) * 255)},${a})`;
+// 絵の寸法（mortar.py の出力から）
+const MORTAR_WORLD = 2.12; // 鉢の絵の横幅（Blender の単位）
+const PESTLE_WORLD = 2.6;
+const TIP = [0.2115, 0.769]; // すりこぎの先（絵の中の位置）
+const FLOOR = 0.6; // 粉が溜まる底の半径（鉢の絵の半径に対する比）
+
+function load(src: string) {
+  const i = new Image();
+  i.src = src;
+  return i;
+}
+
+const lin = (c: number) => Math.round(Math.min(1, Math.pow(c, 1 / 2.2)) * 255);
 
 export class Mortar {
   ctx: CanvasRenderingContext2D;
@@ -31,21 +53,28 @@ export class Mortar {
   progress = 0;
   color: GemName = 'sapphire';
   bits: Bit[] = [];
-  pestle = { x: 0, y: 0.1, down: false, lx: 0, ly: 0, lt: 0 };
-  granite: HTMLCanvasElement;
+  sparks: Spark[] = [];
+  powder: HTMLCanvasElement;
+  pctx: CanvasRenderingContext2D;
+  bowl = load('/mortar.webp');
+  pestleImg = load('/pestle.webp');
+  pestle = { x: 0.12, y: 0.16, down: false, lx: 0, ly: 0, lt: 0, press: 0 };
   raf = 0;
   cracks: [number, number, number, number][] = [];
+  wob = 0;
+  sprites: Sprites | null = null;
   onProgress: (p: number) => void = () => {};
+  getSprites: (c: GemName) => Sprites = () => ({ crystal: new Image(), shards: [] });
 
   constructor(public canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
-    this.granite = document.createElement('canvas');
+    this.powder = document.createElement('canvas');
+    this.pctx = this.powder.getContext('2d')!;
     canvas.addEventListener('pointerdown', (e) => this.down(e));
     canvas.addEventListener('pointermove', (e) => this.move(e));
     const up = () => this.up();
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
-    canvas.addEventListener('pointerleave', up);
   }
 
   open(color: GemName) {
@@ -54,7 +83,8 @@ export class Mortar {
     this.size = s;
     this.canvas.width = this.canvas.height = Math.round(s * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.makeGranite(s, dpr);
+    this.powder.width = this.powder.height = Math.round(s * dpr);
+    this.pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.reset(color);
     cancelAnimationFrame(this.raf);
     const loop = () => {
@@ -71,9 +101,12 @@ export class Mortar {
 
   reset(color: GemName) {
     this.color = color;
+    this.sprites = this.getSprites(color);
     this.progress = 0;
     this.bits = [];
+    this.sparks = [];
     this.cracks = [];
+    this.pctx.clearRect(0, 0, this.size, this.size);
     this.onProgress(0);
   }
 
@@ -86,21 +119,6 @@ export class Mortar {
     };
   }
 
-  private makeGranite(s: number, dpr: number) {
-    const g = this.granite;
-    g.width = g.height = Math.round(s * dpr);
-    const x = g.getContext('2d')!;
-    x.setTransform(dpr, 0, 0, dpr, 0, 0);
-    x.fillStyle = '#26262a';
-    x.fillRect(0, 0, s, s);
-    for (let i = 0; i < s * s * 0.06; i++) {
-      const l = Math.random();
-      x.fillStyle = l < 0.75 ? `rgba(0,0,0,${0.3 + Math.random() * 0.4})` : l < 0.95 ? `rgba(150,150,155,${0.25 + Math.random() * 0.3})` : `rgba(230,225,215,${0.4 + Math.random() * 0.4})`;
-      const r = Math.random() * (l > 0.95 ? 1.4 : 1.1) + 0.3;
-      x.fillRect(Math.random() * s, Math.random() * s, r, r);
-    }
-  }
-
   private local(e: PointerEvent) {
     const r = this.canvas.getBoundingClientRect();
     return [((e.clientX - r.left) / r.width) * 2 - 1, ((e.clientY - r.top) / r.height) * 2 - 1];
@@ -108,29 +126,27 @@ export class Mortar {
 
   private down(e: PointerEvent) {
     this.canvas.setPointerCapture(e.pointerId);
-    const [x, y] = this.local(e);
+    let [x, y] = this.local(e);
+    [x, y] = this.clampIn(x, y);
     Object.assign(this.pestle, { down: true, x, y, lx: x, ly: y, lt: performance.now() });
     sound.grindStart();
+    sound.tick(x);
+  }
+
+  private clampIn(x: number, y: number) {
+    const d = Math.hypot(x, y);
+    const R = FLOOR * 0.92;
+    return d > R ? [(x * R) / d, (y * R) / d] : [x, y];
   }
 
   private move(e: PointerEvent) {
     if (!this.pestle.down) return;
-    let [x, y] = this.local(e);
-    const d = Math.hypot(x, y);
-    const R = 0.6;
-    if (d > R) {
-      x *= R / d;
-      y *= R / d;
-    }
+    const [x, y] = this.clampIn(...(this.local(e) as [number, number]));
     const now = performance.now();
     const dist = Math.hypot(x - this.pestle.lx, y - this.pestle.ly);
     const dt = Math.max(1, now - this.pestle.lt) / 1000;
     const speed = dist / dt;
-    this.pestle.x = x;
-    this.pestle.y = y;
-    this.pestle.lx = x;
-    this.pestle.ly = y;
-    this.pestle.lt = now;
+    Object.assign(this.pestle, { x, y, lx: x, ly: y, lt: now });
     if (dist > 0.002) this.grind(dist, speed, x);
   }
 
@@ -142,206 +158,205 @@ export class Mortar {
 
   private grind(dist: number, speed: number, x: number) {
     const before = this.progress;
-    this.progress = Math.min(1, this.progress + dist / 26);
+    this.progress = Math.min(1, this.progress + dist / 24);
     const p = this.progress;
     sound.grindMove(speed / 3, p, x);
-    // ひびが入る → 割れる
-    if (p < 0.14 && Math.random() < dist * 4) {
-      const a = Math.random() * Math.PI * 2;
-      this.cracks.push([0, 0, Math.cos(a) * 0.2, Math.sin(a) * 0.2]);
+    const P = this.pestle;
+    // 原石の上を通るたびにひび
+    if (p < 0.14) {
+      if (Math.hypot(P.x, P.y) < 0.28) {
+        this.wob = 1;
+        if (Math.random() < dist * 5) {
+          const a = Math.random() * Math.PI * 2;
+          const l = 0.08 + Math.random() * 0.12;
+          const ox = (Math.random() - 0.5) * 0.08;
+          const oy = (Math.random() - 0.5) * 0.08;
+          this.cracks.push([ox, oy, ox + Math.cos(a) * l, oy + Math.sin(a) * l]);
+        }
+      }
     }
     if (before < 0.14 && p >= 0.14) {
       sound.crack(null, 0, 1);
-      for (let i = 0; i < 8; i++) this.addBit(true, 0.05 + Math.random() * 0.045);
+      for (let i = 0; i < 9; i++) this.addBit(0.07 + Math.random() * 0.06, 0, 0, 0.03);
     }
-    // かけらが小さくなり、粉が増える
     if (p >= 0.14) {
       for (const b of this.bits) {
-        if (!b.shard) continue;
-        const near = Math.hypot(b.x - this.pestle.x, b.y - this.pestle.y) < 0.2;
-        if (near) b.r *= 1 - dist * 1.6;
+        const d = Math.hypot(b.x - P.x, b.y - P.y);
+        if (d < 0.17) {
+          b.r *= 1 - dist * 1.3;
+          // 割れて小さいかけらが飛ぶ
+          if (b.r > 0.04 && Math.random() < dist * 2.5) {
+            b.r *= 0.75;
+            this.addBit(b.r * 0.7, b.x, b.y, 0.02);
+            sound.crack(null, x, 0.25);
+          }
+        }
       }
-      const target = Math.floor(Math.max(0, p - 0.18) * 520);
-      const dustNow = this.bits.filter((b) => !b.shard).length;
-      for (let i = dustNow; i < target; i++) this.addBit(false, 0.006 + Math.random() * 0.009, this.pestle.x, this.pestle.y);
-      const shards = this.bits.filter((b) => b.shard && b.r > 0.014);
-      if (shards.length < 3 && p < 0.7 && Math.random() < dist * 6) this.addBit(true, 0.02 + Math.random() * 0.02, this.pestle.x, this.pestle.y);
-      this.bits = this.bits.filter((b) => !b.shard || b.r > 0.012);
+      this.bits = this.bits.filter((b) => b.r > 0.016);
+      // 粉を底に擦りつける
+      this.smear(P.x, P.y, dist, p);
     }
-    // すりこぎに押される
+    // すりこぎに押されて転がる
     for (const b of this.bits) {
-      const dx = b.x - this.pestle.x;
-      const dy = b.y - this.pestle.y;
+      const dx = b.x - P.x;
+      const dy = b.y - P.y;
       const d = Math.hypot(dx, dy);
-      if (d < 0.17 && d > 1e-4) {
-        b.vx += (dx / d) * 0.012 + (Math.random() - 0.5) * 0.01;
-        b.vy += (dy / d) * 0.012 + (Math.random() - 0.5) * 0.01;
-        b.a += (Math.random() - 0.5) * 0.8;
+      if (d < 0.15 + b.r && d > 1e-4) {
+        const k = 0.02 * (1 - d / (0.15 + b.r));
+        b.vx += (dx / d) * k;
+        b.vy += (dy / d) * k;
+        b.va += (Math.random() - 0.5) * 0.2;
       }
     }
     if (Math.floor(before * 20) !== Math.floor(p * 20)) this.onProgress(p);
   }
 
-  private addBit(shard: boolean, r: number, x = 0, y = 0) {
+  private smear(x: number, y: number, dist: number, p: number) {
+    const s = this.size;
+    const c = s / 2;
+    const S = (s / 2) * 0.96;
+    const g = GEM[this.color];
+    const x2 = this.pctx;
+    x2.save();
+    x2.beginPath();
+    x2.arc(c, c, S * FLOOR, 0, Math.PI * 2);
+    x2.clip();
+    const n = Math.ceil(dist * 900 * (0.4 + p));
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.sqrt(Math.random()) * 0.13;
+      const px = c + (x + Math.cos(a) * r) * S;
+      const py = c + (y + Math.sin(a) * r) * S;
+      const k = 0.55 + Math.random() * 0.9;
+      x2.fillStyle = `rgba(${lin(g[0] * k)},${lin(g[1] * k)},${lin(g[2] * k)},${0.25 + Math.random() * 0.4})`;
+      const sz = 0.5 + Math.random() * 1.3;
+      x2.fillRect(px, py, sz, sz);
+      if (Math.random() < 0.06 && this.sparks.length < 260) this.sparks.push({ x: (px - c) / S, y: (py - c) / S, ph: Math.random() * 6.28, sp: 1 + Math.random() * 3 });
+    }
+    // 擦った跡（うっすら）
+    const grd = x2.createRadialGradient(c + x * S, c + y * S, 0, c + x * S, c + y * S, S * 0.16);
+    grd.addColorStop(0, `rgba(${lin(g[0])},${lin(g[1])},${lin(g[2])},${0.035 + p * 0.03})`);
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    x2.fillStyle = grd;
+    x2.fillRect(c + x * S - S * 0.16, c + y * S - S * 0.16, S * 0.32, S * 0.32);
+    x2.restore();
+  }
+
+  private addBit(r: number, x: number, y: number, sp: number) {
     const a = Math.random() * Math.PI * 2;
-    const s = shard ? 0.012 : 0.02;
-    this.bits.push({ x: x + Math.cos(a) * 0.04, y: y + Math.sin(a) * 0.04, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r, a: Math.random() * 6, tw: Math.random() * 6, sides: shard ? 4 + Math.floor(Math.random() * 3) : 6, shard });
+    const n = this.sprites?.shards.length || 1;
+    this.bits.push({ x: x + Math.cos(a) * 0.03, y: y + Math.sin(a) * 0.03, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r, a: Math.random() * 6.28, va: (Math.random() - 0.5) * 0.3, img: Math.floor(Math.random() * n) });
   }
 
   private frame() {
     const s = this.size;
     const x = this.ctx;
     const c = s / 2;
-    const S = s / 2;
-    x.clearRect(0, 0, s, s);
-    // 鉢
-    x.save();
-    x.beginPath();
-    x.arc(c, c, S * 0.96, 0, Math.PI * 2);
-    x.clip();
-    x.drawImage(this.granite, 0, 0, s, s);
-    const rim = x.createRadialGradient(c - S * 0.3, c - S * 0.35, S * 0.1, c, c, S * 0.96);
-    rim.addColorStop(0, 'rgba(255,255,255,.08)');
-    rim.addColorStop(1, 'rgba(0,0,0,.45)');
-    x.fillStyle = rim;
-    x.fillRect(0, 0, s, s);
-    x.beginPath();
-    x.arc(c, c, S * 0.72, 0, Math.PI * 2);
-    const bowl = x.createRadialGradient(c + S * 0.12, c + S * 0.16, S * 0.05, c, c, S * 0.72);
-    bowl.addColorStop(0, 'rgba(255,255,255,.07)');
-    bowl.addColorStop(0.6, 'rgba(0,0,0,.25)');
-    bowl.addColorStop(1, 'rgba(0,0,0,.72)');
-    x.fillStyle = bowl;
-    x.fill();
-    x.restore();
-    x.strokeStyle = 'rgba(255,255,255,.08)';
-    x.lineWidth = 1;
-    x.beginPath();
-    x.arc(c, c, S * 0.72, Math.PI * 0.9, Math.PI * 1.6);
-    x.stroke();
-
-    const col = GEM[this.color];
+    const S = (s / 2) * 0.96;
     const t = performance.now() / 1000;
+    const P = this.pestle;
+    P.press += ((P.down ? 1 : 0) - P.press) * 0.25;
+    x.clearRect(0, 0, s, s);
+
+    // 鉢の影と鉢
+    x.save();
+    x.shadowColor = 'rgba(0,0,0,.75)';
+    x.shadowBlur = s * 0.08;
+    x.shadowOffsetX = s * 0.025;
+    x.shadowOffsetY = s * 0.04;
+    if (this.bowl.complete && this.bowl.naturalWidth) x.drawImage(this.bowl, c - S, c - S, S * 2, S * 2);
+    x.restore();
+
+    // 底に溜まった粉
+    x.drawImage(this.powder, 0, 0, s, s);
+    const g = GEM[this.color];
+    for (const sp of this.sparks) {
+      const k = Math.pow(0.5 + 0.5 * Math.sin(t * sp.sp + sp.ph), 24);
+      if (k < 0.05) continue;
+      const px = c + sp.x * S;
+      const py = c + sp.y * S;
+      x.fillStyle = `rgba(255,255,255,${k * 0.9})`;
+      x.fillRect(px - 0.5, py - 2.5 * k, 1, 5 * k);
+      x.fillRect(px - 2.5 * k, py - 0.5, 5 * k, 1);
+      x.fillStyle = `rgba(${lin(g[0] * 2)},${lin(g[1] * 2)},${lin(g[2] * 2)},${k * 0.6})`;
+      x.beginPath();
+      x.arc(px, py, 1.6 * k, 0, Math.PI * 2);
+      x.fill();
+    }
+
     // 原石
-    if (this.progress < 0.14) {
+    const sp = this.sprites;
+    if (this.progress < 0.14 && sp?.crystal.complete) {
+      this.wob *= 0.85;
+      const r = S * 0.27;
       x.save();
-      x.translate(c, c);
+      x.translate(c + Math.sin(t * 60) * this.wob * 1.2, c);
       x.rotate(0.3);
-      const rr = S * 0.2;
-      const n = 7;
-      const pts: [number, number][] = [];
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2;
-        const k = 0.78 + 0.22 * Math.abs(Math.sin(i * 2.3 + 1));
-        pts.push([Math.cos(a) * rr * k, Math.sin(a) * rr * k]);
-      }
       x.shadowColor = 'rgba(0,0,0,.6)';
-      x.shadowBlur = 14;
+      x.shadowBlur = 12;
       x.shadowOffsetY = 6;
-      for (let i = 0; i < n; i++) {
-        const [ax, ay] = pts[i];
-        const [bx, by] = pts[(i + 1) % n];
-        x.beginPath();
-        x.moveTo(rr * 0.12, -rr * 0.1);
-        x.lineTo(ax, ay);
-        x.lineTo(bx, by);
-        x.closePath();
-        const br = 0.5 + 0.9 * Math.abs(Math.sin(i * 1.7 + 0.4));
-        x.fillStyle = css(col, br);
-        x.fill();
-        x.shadowColor = 'transparent';
-        x.strokeStyle = css(col, 2.4, 0.7);
-        x.lineWidth = 0.8;
-        x.stroke();
-      }
-      x.strokeStyle = 'rgba(255,255,255,.85)';
-      x.lineWidth = 1;
+      x.drawImage(sp.crystal, -r, -r, r * 2, r * 2);
+      x.shadowColor = 'transparent';
+      x.strokeStyle = 'rgba(255,255,255,.75)';
+      x.lineWidth = 0.8;
       for (const [x0, y0, x1, y1] of this.cracks) {
         x.beginPath();
         x.moveTo(x0 * S, y0 * S);
+        x.lineTo((x0 + x1) * 0.5 * S + 2, (y0 + y1) * 0.5 * S - 1);
         x.lineTo(x1 * S, y1 * S);
         x.stroke();
       }
       x.restore();
     }
-    // かけらと粉
+    // かけら
     for (const b of this.bits) {
       b.x += b.vx;
       b.y += b.vy;
-      b.vx *= 0.86;
-      b.vy *= 0.86;
-      // 鉢の底へ
-      b.vx -= b.x * 0.0009;
-      b.vy -= b.y * 0.0009;
+      b.a += b.va;
+      b.vx *= 0.88;
+      b.vy *= 0.88;
+      b.va *= 0.9;
+      // 鉢の底へ寄る
+      b.vx -= b.x * 0.0012;
+      b.vy -= b.y * 0.0012;
       const d = Math.hypot(b.x, b.y);
-      if (d > 0.66) {
-        b.x *= 0.66 / d;
-        b.y *= 0.66 / d;
+      const lim = FLOOR * 0.95 - b.r * 0.5;
+      if (d > lim) {
+        b.x *= lim / d;
+        b.y *= lim / d;
+        b.vx *= -0.3;
+        b.vy *= -0.3;
       }
-      const px = c + b.x * S;
-      const py = c + b.y * S;
-      const r = b.r * S;
+      const img = sp?.shards[b.img];
+      if (!img?.complete) continue;
+      const r = b.r * S * 1.25;
       x.save();
-      x.translate(px, py);
+      x.translate(c + b.x * S, c + b.y * S);
       x.rotate(b.a);
-      x.beginPath();
-      for (let i = 0; i < b.sides; i++) {
-        const a = (i / b.sides) * Math.PI * 2;
-        const k = b.shard ? 0.7 + 0.3 * Math.abs(Math.sin(i * 3.1 + b.tw)) : 1;
-        if (i === 0) x.moveTo(Math.cos(a) * r * k, Math.sin(a) * r * k);
-        else x.lineTo(Math.cos(a) * r * k, Math.sin(a) * r * k);
-      }
-      x.closePath();
-      const tw = Math.pow(0.5 + 0.5 * Math.sin(t * 3 + b.tw * 9 + b.a * 4), 18);
-      x.fillStyle = css(col, (b.shard ? 1.2 : 0.9) + tw * 3);
-      x.fill();
-      if (b.shard) {
-        x.strokeStyle = css(col, 2.6, 0.8);
-        x.lineWidth = 0.7;
-        x.stroke();
-      }
+      x.shadowColor = 'rgba(0,0,0,.55)';
+      x.shadowBlur = 6;
+      x.shadowOffsetY = 3;
+      x.drawImage(img, -r, -r, r * 2, r * 2);
       x.restore();
-      if (!b.shard && tw > 0.5) {
-        x.fillStyle = `rgba(255,255,255,${tw * 0.9})`;
-        x.fillRect(px - 0.6, py - r * 2, 1.2, r * 4);
-        x.fillRect(px - r * 2, py - 0.6, r * 4, 1.2);
-      }
     }
-    // すりこぎ（上から見た先端）
-    const p = this.pestle;
-    const pr = S * 0.15;
-    const px = c + p.x * S;
-    const py = c + p.y * S;
-    x.save();
-    x.globalAlpha = p.down ? 1 : 0.92;
-    x.shadowColor = 'rgba(0,0,0,.7)';
-    x.shadowBlur = p.down ? 10 : 26;
-    x.shadowOffsetX = p.down ? 3 : 10;
-    x.shadowOffsetY = p.down ? 5 : 16;
-    x.beginPath();
-    x.arc(px, py, pr, 0, Math.PI * 2);
-    x.fillStyle = '#2b2a2d';
-    x.fill();
-    x.restore();
-    x.save();
-    x.beginPath();
-    x.arc(px, py, pr, 0, Math.PI * 2);
-    x.clip();
-    x.drawImage(this.granite, px - pr * 3, py - pr * 3, pr * 6, pr * 6);
-    const sh = x.createRadialGradient(px - pr * 0.4, py - pr * 0.5, pr * 0.1, px, py, pr);
-    sh.addColorStop(0, 'rgba(255,255,255,.22)');
-    sh.addColorStop(1, 'rgba(0,0,0,.5)');
-    x.fillStyle = sh;
-    x.fillRect(px - pr, py - pr, pr * 2, pr * 2);
-    x.restore();
-    // 真鍮の口金
-    x.beginPath();
-    x.arc(px, py, pr * 0.55, 0, Math.PI * 2);
-    const brass = x.createLinearGradient(px - pr, py - pr, px + pr, py + pr);
-    brass.addColorStop(0, '#e9cd8e');
-    brass.addColorStop(0.5, '#8b6529');
-    brass.addColorStop(1, '#d6b46d');
-    x.fillStyle = brass;
-    x.fill();
+
+    // すりこぎ：先が指の位置。押すと少し沈む
+    const pi = this.pestleImg;
+    if (pi.complete && pi.naturalWidth) {
+      const W = S * 2 * (PESTLE_WORLD / MORTAR_WORLD);
+      const tx = c + P.x * S;
+      const ty = c + P.y * S;
+      const lift = (1 - P.press) * S * 0.05;
+      // 影
+      x.save();
+      x.globalAlpha = 0.55 - P.press * 0.15;
+      x.filter = `blur(${8 - P.press * 4}px)`;
+      x.fillStyle = '#000';
+      x.beginPath();
+      x.ellipse(tx + S * 0.08 + lift, ty + S * 0.1 + lift, S * 0.12, S * 0.07, 0.7, 0, Math.PI * 2);
+      x.fill();
+      x.restore();
+      x.drawImage(pi, tx - TIP[0] * W - lift * 0.4, ty - TIP[1] * W - lift, W, W);
+    }
   }
 }

@@ -94,7 +94,8 @@ void main(){
     vec3 R = reflect(vec3(0,0,-1), n);
     float sp = pow(max(dot(R, L), 0.), 70.);
     float win = smoothstep(.2, .0, length(q0 - vec2(-.38,.42)) - .12) ;
-    o = body * (1. - .35*pow(1.-z, 3.)) + vec3(1.)*(sp*4. + win*.35);
+    float rim = smoothstep(.86, .955, d) * (1. - smoothstep(.955, 1., d));
+    o = body * (1. - .35*pow(1.-z, 3.)) + vec3(1.)*(sp*4. + win*.35) + mix(col, vec3(1.), .7) * rim * 1.6;
     a = cov * .97;
   } else if(kind < 1.5){
     // 真珠
@@ -227,6 +228,7 @@ uniform vec3 uTint;
 uniform float uFilm;
 uniform float uWobble;
 uniform float uHasLiquid;
+uniform float uNet;
 varying vec2 vUv;
 ${NOISE}
 void main(){
@@ -240,6 +242,36 @@ void main(){
   vec3 c = texture2D(uBeads, vUv + off).rgb;
   vec3 c2 = texture2D(uBeads, vUv + off*1.6).rgb;
   c = mix(c, max(c, c2), .35*wet);
+  // 奥のカットガラス：ビーズの光が、ガラスの稜線を伝って広がる
+  if(uNet > .001){
+    vec2 q = p * 7.5 + vec2(1.7, 3.1);
+    vec2 n = floor(q), f = fract(q);
+    vec2 mg, mr; float md = 8.;
+    for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = vec2(hash21(n+g), hash21(n+g+17.3));
+      vec2 r = g + o - f; float d = dot(r,r);
+      if(d < md){ md = d; mr = r; mg = g; }
+    }
+    float ed = 8.;
+    for(int j=-2;j<=2;j++) for(int i=-2;i<=2;i++){
+      vec2 g = mg + vec2(float(i), float(j));
+      vec2 o = vec2(hash21(n+g), hash21(n+g+17.3));
+      vec2 r = g + o - f;
+      if(dot(mr-r, mr-r) > .00001) ed = min(ed, dot(.5*(mr+r), normalize(r-mr)));
+    }
+    float facet = hash21(n + mg + 5.1);
+    vec3 glow = vec3(0.);
+    for(int k=0;k<10;k++){
+      float a = float(k)*2.39996; float rr = .035 + .012*float(k);
+      glow += texture2D(uBeads, vUv + vec2(cos(a), sin(a))*rr).rgb;
+    }
+    glow /= 10.;
+    float line = 1. - smoothstep(.0, .035, ed);
+    float lum0 = dot(c, vec3(.3,.59,.11));
+    vec3 net = glow * (line * 2.6 + facet * facet * .35);
+    c += net * uNet * (1. - smoothstep(.08, .5, lum0)) * (1.-smoothstep(.96, 1., length(p)));
+  }
   c *= mix(vec3(1.), uTint, wet);
   // 油膜：厚みの場 → 干渉色
   float th = fbm(p*1.3 + flow*1.4 + vec2(t*.012, t*.009));
@@ -275,6 +307,7 @@ uniform float uFade;
 uniform float uSpan;
 uniform float uRing;      // 窓の真鍮リングの見え方 0..1
 uniform float uStretch;   // 扇の角度を何倍の範囲から拾うか
+uniform float uGuide;     // 鏡の線を見せる 0..1
 varying vec2 vUv;
 ${NOISE}
 
@@ -312,6 +345,17 @@ void main(){
       float inner = smoothstep(.86, 1., r);
       ch *= 1. - inner*.55;
       col = ch + vec3(1.,.95,.88)*sheen*uRing;
+      // 鏡の数の説明：映る扇だけ明るく、ほかは暗く、境目に真鍮の線
+      if(uGuide > .001){
+        float al = 3.14159265 / uMirrors;
+        float th = mod(atan(p.y, p.x) - (uGAng - al*.5), 6.2831853);
+        float tr = mod(th, al);
+        float dl = min(tr, al - tr) * r * uR;
+        float line = exp(-dl*dl*.35) * smoothstep(.0, .08, r);
+        float inW = step(th, al);
+        col = mix(col, col*.3, uGuide*(1.-inW)*.8);
+        col += vec3(.95,.75,.4) * line * uGuide * (inW > .5 || th > 6.2831853 - al*.02 ? 1.2 : .5);
+      }
     }
     // 真鍮のリング
     float w = .075;
@@ -382,7 +426,7 @@ void main(){
   float r = length(d)/uR;
   float e = smoothstep(.5, 1., r) * uEdge;
   vec2 dir = d / max(length(d), 1.);
-  vec2 off = dir * e * e * 5. / uRes;
+  vec2 off = dir * e * e * 3.5 / uRes;
   vec3 c;
   c.r = texture2D(uScene, vUv + off).r;
   c.g = texture2D(uScene, vUv).g;

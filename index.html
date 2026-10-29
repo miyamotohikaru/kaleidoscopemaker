@@ -62,6 +62,7 @@
       <p class="lede">好きなビーズを溶液に落として、<br />自分だけの万華鏡をのぞく。</p>
       <button class="cta" id="start" type="button"><span class="cta-num">i</span><span class="cta-label">つくる</span><span class="cta-line" aria-hidden="true"></span></button>
       <button class="cta ghost" id="peek" type="button" hidden><span class="cta-label">のぞく</span></button>
+      <button class="link arch-open" id="intro-arch" type="button" hidden>これまでの鑑定書<span class="arch-n"></span></button>
     </section>
 
     <!-- 1 入れる -->
@@ -83,6 +84,7 @@
     <section class="panel" id="p-fill2" aria-label="満たす">
       <div class="liquids" id="liquids"></div>
       <div class="tints" id="tints" role="radiogroup" aria-label="色"></div>
+      <p class="amount" id="amount" aria-live="polite"></p>
     </section>
 
     <!-- 3 のぞく -->
@@ -129,6 +131,34 @@
           <button class="link" id="save" type="button">画像を保存</button>
           <button class="link" id="again" type="button">もう一度のぞく</button>
           <button class="link" id="restart" type="button">はじめから</button>
+        </div>
+        <p class="kept" id="kept" aria-live="polite"></p>
+        <button class="link arch-open" id="ap-arch" type="button">鑑定書一覧<span class="arch-n"></span></button>
+      </div>
+    </div>
+
+    <!-- 鑑定書一覧（この端末の中だけ） -->
+    <div class="sheet archive" id="archive" hidden role="dialog" aria-modal="true" aria-label="鑑定書一覧">
+      <div class="sheet-head">
+        <p class="sheet-title">鑑定書<small id="arch-count"></small></p>
+        <button class="close" id="arch-close" type="button" aria-label="閉じる"><i></i><i></i></button>
+      </div>
+      <ul class="arch-grid" id="arch-grid"></ul>
+      <p class="arch-empty" id="arch-empty" hidden>まだ、鑑定書はありません。<br />万華鏡に名前をつけると、ここにしまわれます。</p>
+      <p class="arch-note">この端末のブラウザの中にしまっています。<br />ブラウザのデータを消すと、一緒に消えます。</p>
+    </div>
+    <div class="sheet arch-detail" id="arch-detail" hidden role="dialog" aria-modal="true" aria-label="鑑定書">
+      <div class="sheet-head">
+        <button class="back" id="detail-back" type="button" aria-label="一覧へ戻る"><i></i>一覧</button>
+        <p class="detail-date" id="detail-date"></p>
+      </div>
+      <figure class="detail-card"><img id="detail-img" alt="鑑定書" /></figure>
+      <div class="detail-actions">
+        <button class="cta" id="detail-look" type="button"><span class="cta-label">もう一度のぞく</span><span class="cta-line" aria-hidden="true"></span></button>
+        <div class="minor">
+          <button class="link" id="detail-save" type="button">画像を保存</button>
+          <button class="link" id="detail-post" type="button">ポストする</button>
+          <button class="link danger" id="detail-del" type="button">手放す</button>
         </div>
       </div>
     </div>
