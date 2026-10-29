@@ -31,6 +31,55 @@ export interface MortarResult {
   color: GemName;
   shards: number;
   dust: number;
+  photo?: PhotoPiece[]; // 写真を砕いたとき
+}
+
+// 写真のかけら：形は写真の上の座標（0..1）の多角形
+export interface PhotoPiece {
+  poly: [number, number][];
+  cu: number; // 多角形の重心（写真の上）
+  cv: number;
+  x: number; // 鉢の中の位置
+  y: number;
+  a: number;
+  vx: number;
+  vy: number;
+  va: number;
+  area: number;
+}
+const PLATE = 0.78; // 写真の板の大きさ（鉢の半径に対して）
+
+function centroid(poly: [number, number][]) {
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x0, y0] = poly[i];
+    const [x1, y1] = poly[(i + 1) % poly.length];
+    const c = x0 * y1 - x1 * y0;
+    a += c;
+    cx += (x0 + x1) * c;
+    cy += (y0 + y1) * c;
+  }
+  a /= 2;
+  return { area: Math.abs(a), cx: cx / (6 * a || 1), cy: cy / (6 * a || 1) };
+}
+// 凸多角形を直線で2つに割る
+function split(poly: [number, number][], px: number, py: number, nx: number, ny: number) {
+  const A: [number, number][] = [];
+  const B: [number, number][] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i];
+    const q = poly[(i + 1) % poly.length];
+    const dp = (p[0] - px) * nx + (p[1] - py) * ny;
+    const dq = (q[0] - px) * nx + (q[1] - py) * ny;
+    (dp >= 0 ? A : B).push(p);
+    if ((dp >= 0) !== (dq >= 0)) {
+      const t = dp / (dp - dq);
+      const m: [number, number] = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      A.push(m);
+      B.push(m);
+    }
+  }
+  return A.length >= 3 && B.length >= 3 ? [A, B] : null;
 }
 
 // 絵の寸法（mortar.py の出力から）
@@ -63,6 +112,9 @@ export class Mortar {
   cracks: [number, number, number, number][] = [];
   wob = 0;
   sprites: Sprites | null = null;
+  photo: HTMLCanvasElement | null = null;
+  photoData: Uint8ClampedArray | null = null;
+  pieces: PhotoPiece[] = [];
   onProgress: (p: number) => void = () => {};
   getSprites: (c: GemName) => Sprites = () => ({ crystal: new Image(), shards: [] });
 
@@ -94,6 +146,12 @@ export class Mortar {
     loop();
   }
 
+  openPhoto(img: HTMLCanvasElement) {
+    this.photo = img;
+    this.photoData = img.getContext('2d')!.getImageData(0, 0, img.width, img.height).data;
+    this.open(this.color);
+  }
+
   close() {
     cancelAnimationFrame(this.raf);
     sound.grindStop();
@@ -106,12 +164,24 @@ export class Mortar {
     this.bits = [];
     this.sparks = [];
     this.cracks = [];
+    this.pieces = [];
+    if (this.photo) {
+      // 角を落とした写真の板（八角形）
+      const poly: [number, number][] = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+        poly.push([0.5 + Math.cos(a) * 0.5, 0.5 + Math.sin(a) * 0.5]);
+      }
+      const c = centroid(poly);
+      this.pieces.push({ poly, cu: c.cx, cv: c.cy, x: 0, y: 0, a: 0.08, vx: 0, vy: 0, va: 0, area: c.area });
+    }
     this.pctx.clearRect(0, 0, this.size, this.size);
     this.onProgress(0);
   }
 
   result(): MortarResult {
     const p = this.progress;
+    if (this.photo) return { color: this.color, shards: 0, dust: 0, photo: [...this.pieces].sort((a, b) => b.area - a.area) };
     return {
       color: this.color,
       shards: p < 0.5 ? Math.round(3 + (1 - p * 2) * 5) : Math.round(Math.max(0, (0.85 - p) * 6)),
@@ -156,7 +226,79 @@ export class Mortar {
     sound.grindStop();
   }
 
+  private grindPhoto(dist: number, speed: number, x: number) {
+    const P = this.pestle;
+    sound.grindMove(speed / 3, Math.min(1, this.pieces.length / 50), x);
+    const born: PhotoPiece[] = [];
+    for (const pc of this.pieces) {
+      const d = Math.hypot(pc.x - P.x, pc.y - P.y);
+      const reach = 0.14 + Math.sqrt(pc.area) * PLATE * 0.6;
+      if (d > reach || pc.area < 0.0012 || this.pieces.length + born.length > 90) continue;
+      if (Math.random() > dist * (pc.area > 0.05 ? 9 : 5)) continue;
+      // すりこぎの当たった所を通る線で割る
+      const ca = Math.cos(-pc.a), sa = Math.sin(-pc.a);
+      const lx = ((P.x - pc.x) * ca - (P.y - pc.y) * sa) / PLATE / 2 + pc.cu;
+      const ly = ((P.x - pc.x) * sa + (P.y - pc.y) * ca) / PLATE / 2 + pc.cv;
+      const ang = Math.random() * Math.PI;
+      const parts = split(pc.poly, lx + (Math.random() - 0.5) * 0.04, ly + (Math.random() - 0.5) * 0.04, Math.cos(ang), Math.sin(ang));
+      if (!parts) continue;
+      const [A, B] = parts;
+      pc.poly = A;
+      for (const [poly, piece] of [[A, pc], [B, null]] as const) {
+        const c = centroid(poly as [number, number][]);
+        const du = (c.cx - pc.cu) * PLATE * 2;
+        const dv = (c.cy - pc.cv) * PLATE * 2;
+        const ox = du * Math.cos(pc.a) - dv * Math.sin(pc.a);
+        const oy = du * Math.sin(pc.a) + dv * Math.cos(pc.a);
+        const push = 0.006 + Math.random() * 0.008;
+        const n = { poly: poly as [number, number][], cu: c.cx, cv: c.cy, x: pc.x + ox, y: pc.y + oy, a: pc.a, vx: Math.cos(ang + Math.PI / 2) * push * (piece ? 1 : -1), vy: Math.sin(ang + Math.PI / 2) * push * (piece ? 1 : -1), va: (Math.random() - 0.5) * 0.05, area: c.area };
+        if (piece) Object.assign(pc, n);
+        else born.push(n);
+      }
+      sound.crack(null, x, 0.35);
+    }
+    this.pieces.push(...born);
+    // 細かいかけらは写真の色の粉になって、底に擦りつけられる
+    if (this.pieces.length > 25) this.smearPhoto(P.x, P.y, dist);
+    // すりこぎに押される
+    for (const pc of this.pieces) {
+      const dx = pc.x - P.x, dy = pc.y - P.y;
+      const d = Math.hypot(dx, dy);
+      const rr = 0.12 + Math.sqrt(pc.area) * PLATE * 0.4;
+      if (d < rr && d > 1e-4) {
+        const k = 0.012 * (1 - d / rr);
+        pc.vx += (dx / d) * k;
+        pc.vy += (dy / d) * k;
+        pc.va += (Math.random() - 0.5) * 0.04;
+      }
+    }
+    this.progress = Math.min(1, (this.pieces.length - 1) / 45);
+    if (born.length) this.onProgress(this.progress);
+  }
+
+  private smearPhoto(x: number, y: number, dist: number) {
+    const img = this.photoData;
+    const W = this.photo?.width ?? 1;
+    if (!img) return;
+    const s = this.size, c = s / 2, S = (s / 2) * 0.96;
+    const x2 = this.pctx;
+    x2.save();
+    x2.beginPath();
+    x2.arc(c, c, S * FLOOR, 0, Math.PI * 2);
+    x2.clip();
+    const n = Math.ceil(dist * 500);
+    for (let i = 0; i < n; i++) {
+      const k = (Math.floor(Math.random() * W) + Math.floor(Math.random() * W) * W) * 4;
+      const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.12;
+      x2.fillStyle = `rgba(${img[k]},${img[k + 1]},${img[k + 2]},${0.3 + Math.random() * 0.4})`;
+      const sz = 0.6 + Math.random() * 1.2;
+      x2.fillRect(c + (x + Math.cos(a) * r) * S, c + (y + Math.sin(a) * r) * S, sz, sz);
+    }
+    x2.restore();
+  }
+
   private grind(dist: number, speed: number, x: number) {
+    if (this.photo) return this.grindPhoto(dist, speed, x);
     const before = this.progress;
     this.progress = Math.min(1, this.progress + dist / 24);
     const p = this.progress;
@@ -340,6 +482,52 @@ export class Mortar {
       x.restore();
     }
 
+    // 写真のかけら
+    if (this.photo) {
+      for (const pc of this.pieces) {
+        pc.x += pc.vx;
+        pc.y += pc.vy;
+        pc.a += pc.va;
+        pc.vx *= 0.88;
+        pc.vy *= 0.88;
+        pc.va *= 0.9;
+        pc.vx -= pc.x * 0.0008;
+        pc.vy -= pc.y * 0.0008;
+        const d = Math.hypot(pc.x, pc.y);
+        const lim = FLOOR * 0.95 - Math.sqrt(pc.area) * PLATE * 0.5;
+        if (d > Math.max(0.02, lim)) {
+          pc.x *= Math.max(0.02, lim) / d;
+          pc.y *= Math.max(0.02, lim) / d;
+        }
+        const sc = PLATE * S * 2; // 写真の 0..1 → ピクセル
+        x.save();
+        x.translate(c + pc.x * S, c + pc.y * S);
+        x.rotate(pc.a);
+        x.beginPath();
+        pc.poly.forEach(([u, vv], i) => (i ? x.lineTo((u - pc.cu) * sc, (vv - pc.cv) * sc) : x.moveTo((u - pc.cu) * sc, (vv - pc.cv) * sc)));
+        x.closePath();
+        x.shadowColor = 'rgba(0,0,0,.55)';
+        x.shadowBlur = 8;
+        x.shadowOffsetY = 4;
+        x.fillStyle = '#000';
+        x.fill();
+        x.shadowColor = 'transparent';
+        x.save();
+        x.clip();
+        x.drawImage(this.photo, -pc.cu * sc, -pc.cv * sc, sc, sc);
+        // ガラス越しの光
+        const gl = x.createLinearGradient(-sc * 0.3, -sc * 0.3, sc * 0.3, sc * 0.3);
+        gl.addColorStop(0, 'rgba(255,255,255,.22)');
+        gl.addColorStop(0.5, 'rgba(255,255,255,0)');
+        x.fillStyle = gl;
+        x.fillRect(-sc, -sc, sc * 2, sc * 2);
+        x.restore();
+        x.strokeStyle = 'rgba(255,255,255,.55)';
+        x.lineWidth = 0.8;
+        x.stroke();
+        x.restore();
+      }
+    }
     // すりこぎ：先が指の位置。押すと少し沈む
     const pi = this.pestleImg;
     if (pi.complete && pi.naturalWidth) {

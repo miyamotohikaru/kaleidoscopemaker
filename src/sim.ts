@@ -39,6 +39,14 @@ export class Cell {
   liquid: Liquid | null = null;
   level = 0; // 溶液の高さ 0..1
   levelTarget = 0;
+  // 注いだ液の色。注いだ量の分だけ混ざる
+  tint: [number, number, number] = [1, 1, 1];
+  vol = 0;
+  // 失敗のもと
+  murk = 0; // 色を混ぜすぎた濁り
+  cloud = 0; // 水と油を混ぜた白い濁り
+  smudge = 0; // 触りすぎた指のあと
+  poured = new Set<string>();
   angle = 0; // 筒の回転
   gdir = Math.PI * 1.5; // 画面上の重力の向き（下）
   time = 0;
@@ -198,6 +206,23 @@ export class Cell {
         }
       }
     }
+  }
+
+  pourIn(rgb: readonly number[], dv: number, id: string) {
+    const v = this.vol;
+    const w = v + dv;
+    if (w <= 0) return;
+    // ちがう色を足すほど濁る
+    if (v > 0.02) {
+      const d = Math.hypot(rgb[0] - this.tint[0], rgb[1] - this.tint[1], rgb[2] - this.tint[2]);
+      this.murk = Math.min(1, this.murk + d * dv * 2.2);
+    }
+    // 油と、水やはちみつは混ざらない
+    const oily = id === 'oil';
+    for (const p of this.poured) if ((p === 'oil') !== oily) this.cloud = Math.min(1, this.cloud + dv * 3);
+    this.poured.add(id);
+    for (let i = 0; i < 3; i++) this.tint[i] = (this.tint[i] * v + rgb[i] * dv) / w;
+    this.vol = w;
   }
 
   // 筒を目に当てる：中身がふわっと舞う

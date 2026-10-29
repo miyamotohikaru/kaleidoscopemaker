@@ -33,7 +33,7 @@ precision highp float;
 uniform float uTime;
 uniform float uCellAngle;
 uniform sampler2D uPhoto;
-uniform vec4 uPhotoRect[8];
+uniform vec4 uPhotoRect[24];
 varying vec2 vQ;
 varying vec4 vCol;
 varying vec4 vMisc;
@@ -229,6 +229,8 @@ uniform float uFilm;
 uniform float uWobble;
 uniform float uHasLiquid;
 uniform float uNet;
+uniform float uMurk;
+uniform float uCloud;
 varying vec2 vUv;
 ${NOISE}
 void main(){
@@ -279,6 +281,12 @@ void main(){
   float lum = dot(c, vec3(.3,.59,.11));
   c = mix(c, c * (irid*1.5 + .1), uFilm * .32 * wet * smoothstep(.0, .6, lum));
   c += irid * uFilm * .02 * wet * smoothstep(.02, .4, lum);
+  // 失敗：色を混ぜすぎると茶色く濁る
+  float lumM = dot(c, vec3(.3,.59,.11));
+  c = mix(c, vec3(lumM) * vec3(1.05, .78, .45) * .8 + vec3(.012,.008,.003), uMurk * .75 * wet);
+  // 失敗：水と油は混ざらず、白い粒のもやになる
+  float blob = smoothstep(.35, .75, fbm(p*3.5 + flow*2. + uTime*.03));
+  c = mix(c, vec3(.32,.31,.29) * (.6 + .6*blob) + c*.25, uCloud * .7 * wet * (.5 + .5*blob));
   // 液面の線
   if(uHasLiquid > .5 && uLevel > .002 && uLevel < .999){
     float m = exp(-abs(up - surf)*90.);
@@ -308,6 +316,7 @@ uniform float uSpan;
 uniform float uRing;      // 窓の真鍮リングの見え方 0..1
 uniform float uStretch;   // 扇の角度を何倍の範囲から拾うか
 uniform float uGuide;     // 鏡の線を見せる 0..1
+uniform float uSmudge;    // 指のあと 0..1
 varying vec2 vUv;
 ${NOISE}
 
@@ -386,7 +395,7 @@ void main(){
     float refl = min(j, 2.*N - j);
     float fa = phi0 + al*.5 + (tr - al*.5) * uStretch;
     vec2 pf = r * vec2(cos(fa), sin(fa));
-    vec2 apex = vec2(cos(uGAng), sin(uGAng)) * .36;
+    vec2 apex = vec2(0.); // 鏡の要＝筒の中心。真ん中に置いた物は真ん中に映る
     vec2 c = rot(-uAngle) * (pf * uSpan + apex);
     float inside = step(length(c), 1.);
     col = chamber(c) * inside;
@@ -396,6 +405,18 @@ void main(){
     float sd = min(tr, al - tr) * r * uR;
     float seam = exp(-sd*sd*.9) * smoothstep(.02, .25, r);
     col = col * (1. - .3*seam) + col * seam * .25;
+    // 失敗：鏡に指のあと（渦の筋）。そこだけ白くくもってぼやける
+    if(uSmudge > .001){
+      vec2 fp = p - vec2(.28, -.22);
+      float fr = length(fp * vec2(1., 1.25));
+      float ridge = .5 + .5*sin(fr*95. + atan(fp.y, fp.x)*1.5 + vnoise(p*6.)*3.);
+      float m = smoothstep(.42, .15, fr) * (.55 + .45*ridge);
+      vec2 fp2 = p - vec2(-.35, .3);
+      float fr2 = length(fp2 * vec2(1.2, 1.));
+      m = max(m, smoothstep(.3, .1, fr2) * (.55 + .45*(.5 + .5*sin(fr2*110.))));
+      float lm = dot(col, vec3(.3,.59,.11));
+      col = mix(col, vec3(lm)*.55 + vec3(.06,.058,.055), m * uSmudge * .8);
+    }
     // 光の輪（絞りが開く）
     float ir = uIris;
     float m = smoothstep(ir, ir - 2.5*px - .015, r);
