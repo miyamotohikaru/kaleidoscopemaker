@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a0809" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="format-detection" content="telephone=no" />
+    <title>万華鏡メーカー</title>
+    <meta name="description" content="" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="万華鏡メーカー" />
+    <meta property="og:url" content="https://kaleidoscopemaker.vercel.app/" />
+    <meta property="og:title" content="万華鏡メーカー" />
+    <meta property="og:description" content="" />
+    <meta property="og:image" content="https://kaleidoscopemaker.vercel.app/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="万華鏡メーカー" />
+    <meta name="twitter:description" content="" />
+    <meta name="twitter:image" content="https://kaleidoscopemaker.vercel.app/og.jpg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="canonical" href="https://kaleidoscopemaker.vercel.app/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=Noto+Serif+JP:wght@200;300;400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body data-stage="intro">
+    <canvas id="gl" aria-hidden="true"></canvas>
+
+    <svg id="engrave" aria-hidden="true" viewBox="0 0 100 100">
+      <defs><path id="ring-path" d="M50,50 m-46,0 a46,46 0 1,1 92,0 a46,46 0 1,1 -92,0" /></defs>
+      <text><textPath href="#ring-path" startOffset="0">KALEIDOSCOPE MAKER · OIL WAND · FLIP · No. 19 · KALEIDOSCOPE MAKER · OIL WAND · FLIP · No. 19 ·</textPath></text>
+    </svg>
+
+    <header class="top">
+      <a class="mark" href="/" aria-label="万華鏡メーカー はじめから">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="1"><circle cx="16" cy="16" r="14.5" /><path d="M16 1.5v29M1.5 16h29M5.75 5.75l20.5 20.5M26.25 5.75 5.75 26.25" stroke-width=".6" /><circle cx="16" cy="16" r="5" /></g></svg>
+      </a>
+      <ol class="steps" aria-label="手順">
+        <li data-step="fill1"><span>i</span>入れる</li>
+        <li data-step="fill2"><span>ii</span>満たす</li>
+        <li data-step="look"><span>iii</span>のぞく</li>
+        <li data-step="name"><span>iv</span>名付ける</li>
+      </ol>
+      <button class="snd" id="snd" type="button" aria-pressed="true" aria-label="音">
+        <span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="snd-label">音</span>
+      </button>
+    </header>
+
+    <div class="say" id="say" aria-live="polite"><img src="/charm.png" alt="" width="24" height="30" /><p></p></div>
+
+    <!-- 入口：見本の万華鏡がもう回っている -->
+    <section class="intro" id="intro">
+      <p class="kicker">ふりっぷ <i></i> WEB TOY</p>
+      <h1>万華鏡メーカー</h1>
+      <p class="lede">好きなビーズを溶液に落として、<br />自分だけの万華鏡をのぞく。</p>
+      <button class="cta" id="start" type="button"><span class="cta-num">i</span><span class="cta-label">つくる</span><span class="cta-line" aria-hidden="true"></span></button>
+      <button class="cta ghost" id="peek" type="button" hidden><span class="cta-label">のぞく</span></button>
+      <button class="link arch-open" id="intro-arch" type="button" hidden>これまでの鑑定書<span class="arch-n"></span></button>
+    </section>
+
+    <!-- 1 入れる -->
+    <section class="panel" id="p-fill1" aria-label="入れる">
+      <div class="row">
+        <p class="count"><b id="count">0</b><span> / 48</span></p>
+        <div class="seg" role="radiogroup" aria-label="鏡の数">
+          <span class="seg-label">鏡</span>
+          <button type="button" role="radio" data-mirrors="6">6</button>
+          <button type="button" role="radio" data-mirrors="8" aria-checked="true">8</button>
+          <button type="button" role="radio" data-mirrors="12">12</button>
+        </div>
+        <button class="link" id="undo" type="button">ひとつ出す</button>
+      </div>
+      <div class="tray" id="tray"></div>
+    </section>
+
+    <!-- 2 満たす -->
+    <section class="panel" id="p-fill2" aria-label="満たす">
+      <div class="liquids" id="liquids"></div>
+      <div class="tints" id="tints" role="radiogroup" aria-label="色"></div>
+      <p class="amount" id="amount" aria-live="polite"></p>
+    </section>
+
+    <!-- 3 のぞく -->
+    <section class="panel" id="p-look" aria-label="のぞく">
+      <p class="hint">縁をなぞると、ゆっくり回ります</p>
+      <button class="chip" id="tilt" type="button" aria-pressed="false">傾けて回す</button>
+    </section>
+
+    <!-- 4 名付ける -->
+    <section class="panel" id="p-name" aria-label="名付ける">
+      <label class="field">
+        <span>この万華鏡の名前</span>
+        <input id="name" type="text" maxlength="24" autocomplete="off" enterkeyhint="done" inputmode="text" placeholder="たとえば、夜明けの金魚" />
+      </label>
+    </section>
+
+    <footer class="dock">
+      <button class="cta" id="next" type="button"><span class="cta-num" id="next-num">ii</span><span class="cta-label" id="next-label">満たす</span><span class="cta-line" aria-hidden="true"></span></button>
+    </footer>
+
+    <!-- 乳鉢 -->
+    <div class="sheet" id="mortar" hidden role="dialog" aria-modal="true" aria-label="乳鉢">
+      <div class="sheet-head">
+        <p class="sheet-title">乳鉢<small>指でまわして、砕く</small></p>
+        <button class="close" id="mortar-close" type="button" aria-label="閉じる"><i></i><i></i></button>
+      </div>
+      <div class="stones" id="stones" role="radiogroup" aria-label="石"></div>
+      <canvas id="mortar-cv"></canvas>
+      <div class="grind-meter" aria-hidden="true"><span id="grind-bar"></span><em id="grind-word">原石</em></div>
+      <button class="cta" id="mortar-add" type="button" disabled><span class="cta-label">筒に入れる</span><span class="cta-line" aria-hidden="true"></span></button>
+    </div>
+    <input id="photo" type="file" accept="image/*" hidden />
+
+    <!-- 鑑定 -->
+    <div class="appraisal" id="appraisal" hidden role="dialog" aria-modal="true" aria-label="鑑定">
+      <div class="kuma-stage">
+        <canvas id="kuma"></canvas>
+        <p class="kuma-say" id="kuma-say"></p>
+      </div>
+      <figure class="cert" id="cert"><img id="cert-img" alt="鑑定書" /></figure>
+      <div class="actions" id="actions">
+        <button class="cta" id="post" type="button"><span class="cta-label">ポストする</span><span class="cta-line" aria-hidden="true"></span></button>
+        <div class="minor">
+          <button class="link" id="save" type="button">画像を保存</button>
+          <button class="link" id="again" type="button">もう一度のぞく</button>
+          <button class="link" id="restart" type="button">はじめから</button>
+        </div>
+        <p class="kept" id="kept" aria-live="polite"></p>
+        <button class="link arch-open" id="ap-arch" type="button">鑑定書一覧<span class="arch-n"></span></button>
+      </div>
+    </div>
+
+    <!-- 鑑定書一覧（この端末の中だけ） -->
+    <div class="sheet archive" id="archive" hidden role="dialog" aria-modal="true" aria-label="鑑定書一覧">
+      <div class="sheet-head">
+        <p class="sheet-title">鑑定書<small id="arch-count"></small></p>
+        <button class="close" id="arch-close" type="button" aria-label="閉じる"><i></i><i></i></button>
+      </div>
+      <ul class="arch-grid" id="arch-grid"></ul>
+      <p class="arch-empty" id="arch-empty" hidden>まだ、鑑定書はありません。<br />万華鏡に名前をつけると、ここにしまわれます。</p>
+      <p class="arch-note">この端末のブラウザの中にしまっています。<br />ブラウザのデータを消すと、一緒に消えます。</p>
+    </div>
+    <div class="sheet arch-detail" id="arch-detail" hidden role="dialog" aria-modal="true" aria-label="鑑定書">
+      <div class="sheet-head">
+        <button class="back" id="detail-back" type="button" aria-label="一覧へ戻る"><i></i>一覧</button>
+        <p class="detail-date" id="detail-date"></p>
+      </div>
+      <figure class="detail-card"><img id="detail-img" alt="鑑定書" /></figure>
+      <div class="detail-actions">
+        <button class="cta" id="detail-look" type="button"><span class="cta-label">もう一度のぞく</span><span class="cta-line" aria-hidden="true"></span></button>
+        <div class="minor">
+          <button class="link" id="detail-save" type="button">画像を保存</button>
+          <button class="link" id="detail-post" type="button">ポストする</button>
+          <button class="link danger" id="detail-del" type="button">手放す</button>
+        </div>
+      </div>
+    </div>
+
+    <noscript><p class="nojs">この万華鏡は JavaScript で動きます。</p></noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
