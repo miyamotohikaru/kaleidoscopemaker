@@ -188,7 +188,7 @@ async function buildTray() {
       sound.unlock();
       sound.slide();
       const g = document.createElement('img');
-      g.className = 'ghost';
+      g.className = 'drag-ghost';
       g.src = pick.el.querySelector('img')!.src;
       document.body.appendChild(g);
       pick.ghost = g;

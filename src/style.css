@@ -172,9 +172,9 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .slot .knob { position: absolute; top: 6px; left: 50%; width: 10px; height: 2px; margin-left: -5px; background: var(--brass); opacity: 0.6; border-radius: 2px; }
 
 /* つまんでいる最中のビーズ */
-.ghost { position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.6)); transition: width 0.18s var(--ease), height 0.18s var(--ease); }
-.ghost.over { filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.7)); }
-.ghost.back { opacity: 0; transition: opacity 0.25s var(--ease); }
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.6)); transition: width 0.18s var(--ease), height 0.18s var(--ease); }
+.drag-ghost.over { filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.7)); }
+.drag-ghost.back { opacity: 0; transition: opacity 0.25s var(--ease); }
 
 /* 溶液 */
 .liquids { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
