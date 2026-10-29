@@ -24,7 +24,8 @@ export interface PourState {
   tilt: number; // 0 = 真上, 1 = 斜め
   level: number;
   liquid: string | null;
-  tint: [number, number, number];
+  cellCol: [number, number, number]; // 筒の中で混ざった色
+  bottleCol: [number, number, number]; // 瓶の中の色
   pouring: boolean;
   pourX: number;
   time: number;
@@ -237,14 +238,15 @@ export class Pour3D {
 
     const L = s.liquid ? LIQ[s.liquid] : null;
     const h = Math.max(0.001, s.level * H * 0.94);
-    const col = L ? new THREE.Vector3(L.col[0] * s.tint[0], L.col[1] * s.tint[1], L.col[2] * s.tint[2]) : new THREE.Vector3();
+    const col = new THREE.Vector3(...s.cellCol);
+    const bcol = new THREE.Vector3(...s.bottleCol);
     const show = L && s.level > 0.005;
     this.liqSide.visible = this.liqTop.visible = !!show;
     this.liqSide.scale.set(1, h, 1);
     this.liqSide.position.y = h / 2;
     this.liqTop.position.y = h;
     for (const k of ['liqSide', 'liqTop', 'stream', 'bottleLiq']) {
-      (this.mats[k].uniforms.uCol.value as THREE.Vector3).copy(col);
+      (this.mats[k].uniforms.uCol.value as THREE.Vector3).copy(k === 'stream' || k === 'bottleLiq' ? bcol : col);
       this.mats[k].uniforms.uA.value = L?.a ?? 0;
     }
     this.mats.liqTop.uniforms.uTime.value = s.time;

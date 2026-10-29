@@ -84,7 +84,7 @@ export class Renderer {
   charmMat: THREE.ShaderMaterial;
   mats: Record<string, THREE.ShaderMaterial> = {};
   photoTex: THREE.Texture;
-  photoRects: THREE.Vector4[] = Array.from({ length: 8 }, () => new THREE.Vector4(0, 0, 1, 1));
+  photoRects: THREE.Vector4[] = Array.from({ length: 24 }, () => new THREE.Vector4(0, 0, 1, 1));
   time = 0;
   ready: Promise<void>;
 

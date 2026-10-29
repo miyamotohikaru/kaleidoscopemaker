@@ -71,11 +71,12 @@ export interface Liquid {
   drag: number; // 速度の減衰（1秒あたり）
   film: number; // 油膜の干渉色の強さ
   wobble: number; // 光のゆらぎ
+  base: [number, number, number]; // 液そのものの色（光にかける）
 }
 export const LIQUIDS: Liquid[] = [
-  { id: 'water', label: '水', density: 1.0, drag: 2.2, film: 0.25, wobble: 1.0 },
-  { id: 'oil', label: 'オイル', density: 0.92, drag: 6.5, film: 1.0, wobble: 0.6 },
-  { id: 'honey', label: 'はちみつ', density: 1.42, drag: 22, film: 0.45, wobble: 0.25 },
+  { id: 'water', label: '水', density: 1.0, drag: 2.2, film: 0.25, wobble: 1.0, base: [0.92, 0.97, 1.0] },
+  { id: 'oil', label: 'オイル', density: 0.92, drag: 6.5, film: 1.0, wobble: 0.6, base: [1.0, 0.9, 0.66] },
+  { id: 'honey', label: 'はちみつ', density: 1.42, drag: 22, film: 0.45, wobble: 0.25, base: [1.0, 0.7, 0.32] },
 ];
 
 export const TINTS: { id: string; label: string; rgb: [number, number, number] }[] = [

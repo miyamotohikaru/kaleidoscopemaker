@@ -39,6 +39,9 @@ export class Cell {
   liquid: Liquid | null = null;
   level = 0; // 溶液の高さ 0..1
   levelTarget = 0;
+  // 注いだ液の色。注いだ量の分だけ混ざる
+  tint: [number, number, number] = [1, 1, 1];
+  vol = 0;
   angle = 0; // 筒の回転
   gdir = Math.PI * 1.5; // 画面上の重力の向き（下）
   time = 0;
@@ -198,6 +201,14 @@ export class Cell {
         }
       }
     }
+  }
+
+  pourIn(rgb: readonly number[], dv: number) {
+    const v = this.vol;
+    const w = v + dv;
+    if (w <= 0) return;
+    for (let i = 0; i < 3; i++) this.tint[i] = (this.tint[i] * v + rgb[i] * dv) / w;
+    this.vol = w;
   }
 
   // 筒を目に当てる：中身がふわっと舞う

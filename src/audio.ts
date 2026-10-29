@@ -432,56 +432,45 @@ export class Sound {
     this.noise(t, 0.28, 2200, 0.7, 0.03, o, 'bandpass', 0.08);
   }
 
-  // こすくまくんの声。どうぶつ語のように1文字ずつ鳴らすが、
-  // 音程は五音音階にそろえ、角のない三角波＋母音の響き（フォルマント）で、低めにゆっくり。
+  // こすくまくんの声。どうぶつ語のような速くて高い声ではなく、
+  // 低めで、ゆっくり、ほぼ同じ高さで淡々と。毛糸を巻いたピアノのような丸い音に、少しだけ息を混ぜる。
+  // 2文字に1回くらいしか鳴らさない（つぶやく速さ）。語尾は少し下がり、「？」だけ上がる。
   voice(ch: string, i: number, last: boolean, ask: boolean) {
     if (!this.ctx || !this.enabled) return;
+    if (!vowelOf(ch)) return;
+    if (!last && i % 2 === 1) return;
     const ctx = this.ctx;
-    const v = vowelOf(ch);
-    if (!v) return;
     const t = ctx.currentTime + 0.005;
-    // D の五音音階（D E F# A B）から、文字ごとに近い音を選ぶ
-    const scale = [293.66, 329.63, 369.99, 440, 493.88];
-    const step = (ch.charCodeAt(0) * 7 + i * 3) % scale.length;
-    let f = scale[step] * 0.5;
-    if (last) f = ask ? scale[3] * 0.5 : scale[0] * 0.5 * 0.94;
-    const dur = last ? 0.16 : 0.085;
-    const o = this.out(Math.sin(i * 1.3) * 0.12, 0.9);
+    // ほとんど G3。ときどき F3 に落ちるだけ
+    let f = ch.charCodeAt(0) % 5 === 0 ? 174.61 : 196.0;
+    if (last) f = ask ? 233.08 : 164.81;
+    const dur = last ? 0.42 : 0.22;
+    const o = this.out(0, 0.7);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1100;
+    lp.Q.value = 0.4;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, t);
-    env.gain.linearRampToValueAtTime(0.16, t + 0.012);
-    env.gain.setTargetAtTime(0.0001, t + dur * 0.55, dur * 0.35);
-    env.connect(o);
-    const src = ctx.createOscillator();
-    src.type = 'triangle';
-    src.frequency.setValueAtTime(f * 1.03, t);
-    src.frequency.exponentialRampToValueAtTime(f * (last && ask ? 1.18 : 0.97), t + dur);
-    const vib = ctx.createOscillator();
-    vib.frequency.value = 5.5;
-    const vg = ctx.createGain();
-    vg.gain.value = f * 0.008;
-    vib.connect(vg).connect(src.frequency);
-    const [f1, f2] = FORMANT[v];
-    for (const [ff, q, g] of [
-      [f1, 6, 1.0],
-      [f2, 9, 0.55],
+    env.gain.linearRampToValueAtTime(0.13, t + 0.025);
+    env.gain.setTargetAtTime(0.0001, t + 0.04, dur * 0.32);
+    lp.connect(env).connect(o);
+    for (const [m, a] of [
+      [1, 1],
+      [2, 0.22],
+      [3, 0.06],
     ] as const) {
-      const bp = ctx.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = ff;
-      bp.Q.value = q;
-      const gg = ctx.createGain();
-      gg.gain.value = g * 2.2;
-      src.connect(bp).connect(gg).connect(env);
+      const osc = ctx.createOscillator();
+      osc.frequency.setValueAtTime(f * m, t);
+      osc.frequency.exponentialRampToValueAtTime(f * m * (last && ask ? 1.06 : 0.975), t + dur);
+      const g = ctx.createGain();
+      g.gain.value = a;
+      osc.connect(g).connect(lp);
+      osc.start(t);
+      osc.stop(t + dur + 0.3);
     }
-    // 芯の音（ほんの少し）
-    const core = ctx.createGain();
-    core.gain.value = 0.18;
-    src.connect(core).connect(env);
-    src.start(t);
-    vib.start(t);
-    src.stop(t + dur + 0.25);
-    vib.stop(t + dur + 0.25);
+    // 息
+    this.noise(t, 0.09, 700, 0.6, 0.012, o, 'bandpass', 0.02);
   }
 
   // 「……」：口を閉じた低い「ん」
@@ -529,15 +518,7 @@ export class Sound {
 
 export const sound = new Sound();
 
-// 母音ごとの響き（第1・第2フォルマント）
-const FORMANT: Record<string, [number, number]> = {
-  a: [800, 1250],
-  i: [320, 2300],
-  u: [360, 1350],
-  e: [480, 1900],
-  o: [480, 880],
-  n: [280, 1100],
-};
+// 声を鳴らす文字かどうか（かな・漢字・英数字）
 const ROWS: [string, string][] = [
   ['a', 'あかさたなはまやらわがざだばぱぁゃゎアカサタナハマヤラワガザダバパァャヮ'],
   ['i', 'いきしちにひみりぎじぢびぴぃイキシチニヒミリギジヂビピィ'],

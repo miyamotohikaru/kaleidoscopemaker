@@ -33,7 +33,7 @@ precision highp float;
 uniform float uTime;
 uniform float uCellAngle;
 uniform sampler2D uPhoto;
-uniform vec4 uPhotoRect[8];
+uniform vec4 uPhotoRect[24];
 varying vec2 vQ;
 varying vec4 vCol;
 varying vec4 vMisc;
@@ -386,7 +386,7 @@ void main(){
     float refl = min(j, 2.*N - j);
     float fa = phi0 + al*.5 + (tr - al*.5) * uStretch;
     vec2 pf = r * vec2(cos(fa), sin(fa));
-    vec2 apex = vec2(cos(uGAng), sin(uGAng)) * .36;
+    vec2 apex = vec2(0.); // 鏡の要＝筒の中心。真ん中に置いた物は真ん中に映る
     vec2 c = rot(-uAngle) * (pf * uSpan + apex);
     float inside = step(length(c), 1.);
     col = chamber(c) * inside;

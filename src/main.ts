@@ -3,8 +3,8 @@ import { GEM, Kind, LIQUIDS, MORTAR_STONES, SHELF, TINTS, type GemName, type Ite
 import { Cell, mulberry, type Body } from './sim';
 import { Renderer, type ViewState } from './render';
 import { sound } from './audio';
-import { Mortar } from './mortar';
-import { appraise } from './appraise';
+import { Mortar, type PhotoPiece } from './mortar';
+import { appraise, measure } from './appraise';
 import { drawCard } from './card';
 import { decode, dust, encode } from './share';
 import { Kuma3D, preloadKuma } from './kuma3d';
@@ -49,7 +49,7 @@ const v: ViewState = {
   bloom: 0.6,
   back: 0.02,
   tint: [1, 1, 1],
-  span: 0.66,
+  span: 0.95,
   wedge: -Math.PI / 2,
   guide: 0,
 };
@@ -119,10 +119,11 @@ function sample(seed: number) {
   const r = mulberry(seed);
   const c = new Cell();
   const pick = ['g-sap', 'g-sap', 'g-eme', 'g-rub', 'g-amb', 'g-clr', 'pearl', 'gold', 'gold', 'm-ame', 'm-sap', 'm-eme', 'm-clr', 'f-rose', 'f-ind', 'g-rub', 'g-sap', 'm-clr', 'pearl', 'g-eme', 'gold', 'm-sap', 'g-sap', 'm-ame', 'g-rub', 'g-amb', 'pearl', 'm-clr', 'g-eme', 'f-ivo', 'g-clr', 'm-sap', 'gold', 'g-sap'];
-  for (const id of pick) {
+  for (const [k, id] of pick.entries()) {
     const it = SHELF.find((s) => s.id === id)!;
     const a = r() * Math.PI * 2;
-    const d = Math.sqrt(r()) * 0.8;
+    // 最初の数個は真ん中に（真ん中の模様になる）
+    const d = k < 5 ? 0.04 + r() * 0.16 : 0.2 + Math.sqrt(r()) * 0.65;
     const b = makeBody(it, Math.cos(a) * d, Math.sin(a) * d, r());
     c.add(b);
   }
@@ -130,7 +131,7 @@ function sample(seed: number) {
   c.liquid = LIQUIDS[1];
   c.level = c.levelTarget = 1;
   c.flat = false;
-  c.gs = 1;
+  c.gs = 0.05;
   for (let i = 0; i < 240; i++) c.step(1 / 60, 0);
   return c;
 }
@@ -170,6 +171,7 @@ async function buildTray() {
   }
   html.push(`<button class="slot drawer" type="button" data-drawer="mortar" aria-label="乳鉢で砕く"><i class="knob"></i>${DRAWER_MORTAR}<span>乳鉢</span></button>`);
   html.push(`<button class="slot drawer" type="button" data-drawer="photo" aria-label="写真を破片にする"><i class="knob"></i>${DRAWER_PHOTO}<span>写真</span></button>`);
+  if (html.length % 2) html.push('<div class="slot filler" aria-hidden="true"></div>');
   tray.innerHTML = html.join('');
   // つまんで上へ引き出し、筒の好きな場所で離す
   const pick = { id: -1, el: null as HTMLElement | null, sx: 0, sy: 0, ghost: null as HTMLImageElement | null, it: null as Item | null };
@@ -231,14 +233,60 @@ async function buildTray() {
       return $<HTMLInputElement>('#photo').click();
     }
     const it = SHELF.find((s) => s.id === el.dataset.id);
-    if (it) addItem(it);
+    if (it) hold(it, el);
   });
+}
+
+// ---------- 手に持って、置く場所を自分で決める ----------
+let held: Item | null = null;
+let heldGhost: HTMLImageElement | null = null;
+let heldHinted = false;
+function hold(it: Item, el: HTMLElement) {
+  if (held === it) return letGo();
+  letGo();
+  held = it;
+  el.classList.add('holding');
+  sound.slide();
+  const g = document.createElement('img');
+  g.className = 'drag-ghost held';
+  g.src = el.querySelector('img')!.src;
+  document.body.appendChild(g);
+  heldGhost = g;
+  placeGhost(v.cx, v.cy, false);
+  if (!heldHinted) {
+    heldHinted = true;
+    say('置きたいところを、押して。');
+  }
+}
+function letGo() {
+  held = null;
+  heldGhost?.remove();
+  heldGhost = null;
+  document.querySelectorAll('.slot.holding').forEach((x) => x.classList.remove('holding'));
+}
+function ghostSize(it: Item) {
+  return Math.max(14, ((it.size[0] + it.size[1]) / 2) * v.R * 2 * (it.pinch ? 6 : 1.3));
+}
+function placeGhost(x: number, y: number, active: boolean) {
+  if (!heldGhost || !held) return;
+  const sz = ghostSize(held);
+  heldGhost.style.width = heldGhost.style.height = sz + 'px';
+  // 指で隠れないよう、押している間は少し上に浮かせて見せる
+  heldGhost.style.transform = `translate(${x - sz / 2}px, ${y - sz / 2 - (active ? 34 : 0)}px)`;
+  heldGhost.classList.toggle('waiting', !active);
+}
+function clampIn(x: number, y: number, r: number): [number, number] {
+  const d = Math.hypot(x, y);
+  const lim = 0.92 - r;
+  return d > lim ? [(x * lim) / d, (y * lim) / d] : [x, y];
 }
 function shortLabel(s: string) {
   return s.replace('のガラス玉', '').replace('のかけら', '').replace('のラメ', 'ラメ').replace('こすくまくん', 'ちゃーむ');
 }
 
 // ---------- 写真の破片（端末の中だけで処理） ----------
+// 写真は乳鉢に入れて、自分で好きな細かさまですりつぶす
+let photoCanvas: HTMLCanvasElement | null = null;
 $<HTMLInputElement>('#photo').addEventListener('change', async (e) => {
   const f = (e.target as HTMLInputElement).files?.[0];
   (e.target as HTMLInputElement).value = '';
@@ -247,25 +295,11 @@ $<HTMLInputElement>('#photo').addEventListener('change', async (e) => {
     const bmp = await createImageBitmap(f);
     const c = document.createElement('canvas');
     c.width = c.height = 512;
-    const x = c.getContext('2d')!;
+    const x = c.getContext('2d', { willReadFrequently: true })!;
     const s = Math.min(bmp.width, bmp.height);
     x.drawImage(bmp, (bmp.width - s) / 2, (bmp.height - s) / 2, s, s, 0, 0, 512, 512);
-    const rects: [number, number, number, number][] = [];
-    for (let i = 0; i < 5; i++) {
-      const w = 0.32 + rnd() * 0.2;
-      rects.push([rnd() * (1 - w), rnd() * (1 - w), w, w]);
-    }
-    R.setPhoto(c, rects);
-    cell.bodies = cell.bodies.filter((b) => b.kind !== Kind.Photo);
-    for (let i = 0; i < 5; i++) {
-      if (bigCount() >= MAX_BIG) break;
-      const [px, py] = cell.dropPoint(rnd);
-      const b = makeBody({ id: 'photo', label: '写真', kind: Kind.Photo, color: 'clear', size: [0.08, 0.11], density: 1.2 }, px + (rnd() - 0.5) * 0.3, py);
-      b.photo = i;
-      cell.add(b);
-    }
-    sound.crack(null, 0, 0.5);
-    updateCount();
+    photoCanvas = c;
+    openMortar(c);
   } catch {
     say('その写真は、読めなかった。');
   }
@@ -305,6 +339,32 @@ $('#stones').addEventListener('click', (e) => {
   sound.tick();
   mortar.reset(stone);
 });
+function addPhotoPieces(pieces: PhotoPiece[], img: HTMLCanvasElement) {
+  // 大きい順に 24 個まで。かけらの形の外枠を、写真のどこを映すかに使う
+  const use = pieces.slice(0, 24);
+  const rects: [number, number, number, number][] = use.map((p) => {
+    const us = p.poly.map((q) => q[0]);
+    const vs = p.poly.map((q) => q[1]);
+    const u0 = Math.min(...us), v0 = Math.min(...vs);
+    const w = Math.max(Math.max(...us) - u0, Math.max(...vs) - v0, 0.02);
+    // 画像の上下（canvas は上が 0、テクスチャは下が 0）
+    return [u0, 1 - v0 - w, w, w];
+  });
+  R.setPhoto(img, rects);
+  cell.bodies = cell.bodies.filter((b) => b.kind !== Kind.Photo);
+  use.forEach((p, i) => {
+    if (bigCount() >= MAX_BIG) return;
+    const r = Math.max(0.025, Math.min(0.22, Math.sqrt(p.area) * 0.42));
+    const [x, y] = clampIn(p.x * 0.7, -p.y * 0.7, r);
+    const b = makeBody({ id: 'photo', label: '写真', kind: Kind.Photo, color: 'clear', size: [r, r], density: 1.2 }, x, y);
+    b.photo = i;
+    b.vx = b.vy = 0;
+    cell.add(b);
+  });
+  sound.sprinkle((sound.ctx?.currentTime ?? 0) + 0.02, 0.6);
+  updateCount();
+}
+
 const GRIND_WORDS: [number, string][] = [
   [0, '原石'],
   [0.14, 'かけら'],
@@ -313,14 +373,23 @@ const GRIND_WORDS: [number, string][] = [
 ];
 mortar.onProgress = (p) => {
   $('#grind-bar').style.width = `${p * 100}%`;
+  if (mortar.photo) {
+    const n = mortar.pieces.length;
+    $('#grind-word').textContent = n <= 1 ? 'まだ一枚' : n > 40 ? 'こまかい' : `${n} かけら`;
+    $<HTMLButtonElement>('#mortar-add').disabled = false;
+    return;
+  }
   $('#grind-word').textContent = GRIND_WORDS.filter(([t]) => p >= t).pop()![1];
   $<HTMLButtonElement>('#mortar-add').disabled = p < 0.14;
 };
-function openMortar() {
+function openMortar(photo?: HTMLCanvasElement) {
   sound.slide();
   buildStones();
+  $('#stones').hidden = !!photo;
+  $('#mortar .sheet-title').firstChild!.textContent = photo ? '写真を砕く' : '乳鉢';
   $('#mortar').hidden = false;
-  requestAnimationFrame(() => mortar.open(stone));
+  mortar.photo = null;
+  requestAnimationFrame(() => (photo ? mortar.openPhoto(photo) : mortar.open(stone)));
 }
 function closeMortar() {
   mortar.close();
@@ -333,6 +402,7 @@ $('#mortar-close').addEventListener('click', () => {
 $('#mortar-add').addEventListener('click', () => {
   const res = mortar.result();
   closeMortar();
+  if (res.photo && photoCanvas) return addPhotoPieces(res.photo, photoCanvas);
   const [x, y] = cell.dropPoint(rnd);
   for (let i = 0; i < res.shards && bigCount() < MAX_BIG; i++) {
     const b = makeBody({ id: 'shard', label: '', kind: Kind.Mineral, color: res.color, size: [0.03, 0.05], density: 2.6 }, x + (rnd() - 0.5) * 0.3, y);
@@ -459,7 +529,7 @@ async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () 
       continue;
     }
     sound.voice(c, i, i === lastVoiced, ask);
-    await wait(i === lastVoiced ? 160 : 105);
+    await wait(i === lastVoiced ? 220 : 125);
   }
 }
 
@@ -472,12 +542,13 @@ const NEXT: Record<string, [string, string]> = {
   name: ['', '鑑定してもらう'],
 };
 function setNext() {
-  const [n, l] = shared && stage === 'look' ? ['i', '自分もつくる'] : NEXT[stage] ?? ['', ''];
+  const [n, l] = shared && stage === 'look' ? ['i', '自分もつくる'] : returnTo && stage === 'look' ? ['', '鑑定書に戻る'] : NEXT[stage] ?? ['', ''];
   $('#next-num').textContent = n;
   $('#next-label').textContent = l;
   $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && (!cell.liquid || cell.levelTarget < 0.05);
 }
 function setStage(s: Stage) {
+  if (s !== 'fill1') letGo();
   stage = s;
   body.dataset.stage = s;
   const k = ORDER.indexOf(s);
@@ -546,9 +617,14 @@ const easeIO = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2
 const easeO = (t: number) => 1 - Math.pow(1 - t, 3);
 
 let auto = 0; // 自動で回る残り時間
+// 鑑定書から「もう一度のぞく」で来たとき、戻る先
+let returnTo: null | 'appraisal' | Cert = null;
 let tilt = 0;
 let pour3d: Pour3D | null = null;
 async function toWindow() {
+  returnTo = null;
+  session = null;
+  $('#resume').hidden = true;
   body.classList.add('busy');
   await tween(450, (t) => (v.fade = 1 - t));
   cell = new Cell();
@@ -606,6 +682,8 @@ async function toLook() {
 const drag = { on: false, id: -1, last: 0, t: 0, vel: 0 };
 let angVel = 0;
 const finger = { on: false, id: -1, x: 0, y: 0, vx: 0, vy: 0, t: 0 };
+const placing = { on: false, id: -1, x: 0, y: 0 };
+const grab = { b: null as Body | null, id: -1, x: 0, y: 0, vx: 0, vy: 0, t: 0 };
 const pour = { on: false, id: -1, x: 0, amt: 0 };
 function ang(e: PointerEvent) {
   return Math.atan2(-(e.clientY - v.cy), e.clientX - v.cx);
@@ -618,12 +696,39 @@ function toCell(cx: number, cy: number): [number, number] {
   return [x * c - y * s, x * s + y * c];
 }
 const POUR_RATE: Record<string, number> = { water: 0.2, oil: 0.15, honey: 0.08 };
+// 瓶の中の液の色（液そのものの色 × 選んだ色）
+function bottleColor(): [number, number, number] {
+  const b = cell.liquid?.base ?? [1, 1, 1];
+  const t = TINTS[tintIdx].rgb;
+  return [b[0] * t[0], b[1] * t[1], b[2] * t[2]];
+}
 canvas.addEventListener('pointerdown', (e) => {
   sound.unlock();
   if (body.classList.contains('busy')) return;
   canvas.setPointerCapture(e.pointerId);
   if (stage === 'fill1') {
     const [x, y] = toCell(e.clientX, e.clientY);
+    if (held) {
+      Object.assign(placing, { on: true, id: e.pointerId, x: e.clientX, y: e.clientY });
+      placeGhost(e.clientX, e.clientY, true);
+      return;
+    }
+    // 置いた粒をつまんで動かす
+    let best: Body | null = null;
+    let bd = 1e9;
+    for (const b of cell.bodies) {
+      if (b.small) continue;
+      const d = Math.hypot(b.x - x, b.y - y) / (b.r * 1.25);
+      if (d < 1 && d < bd) {
+        bd = d;
+        best = b;
+      }
+    }
+    if (best) {
+      Object.assign(grab, { b: best, id: e.pointerId, x, y, vx: 0, vy: 0, t: performance.now() });
+      sound.tick(x);
+      return;
+    }
     Object.assign(finger, { on: true, id: e.pointerId, x, y, vx: 0, vy: 0, t: performance.now() });
     return;
   }
@@ -651,6 +756,18 @@ function pourX(clientX: number) {
   return Math.max(-0.62, Math.min(0.62, (clientX - v.cx) / v.R));
 }
 canvas.addEventListener('pointermove', (e) => {
+  if (placing.on && e.pointerId === placing.id) {
+    Object.assign(placing, { x: e.clientX, y: e.clientY });
+    placeGhost(e.clientX, e.clientY, true);
+    return;
+  }
+  if (grab.b && e.pointerId === grab.id) {
+    const [x, y] = clampIn(...toCell(e.clientX, e.clientY), grab.b.r);
+    const now = performance.now();
+    const dt = Math.max(8, now - grab.t) / 1000;
+    Object.assign(grab, { vx: (x - grab.x) / dt, vy: (y - grab.y) / dt, x, y, t: now });
+    return;
+  }
   if (finger.on && e.pointerId === finger.id) {
     const [x, y] = toCell(e.clientX, e.clientY);
     const now = performance.now();
@@ -686,6 +803,20 @@ function stopPour() {
   setNext();
 }
 const release = (e: PointerEvent) => {
+  if (placing.on && e.pointerId === placing.id) {
+    placing.on = false;
+    // 指の少し上（見えていた位置）に置く
+    const yy = e.clientY - 34;
+    if (held && Math.hypot(e.clientX - v.cx, yy - v.cy) < v.R * 0.98 && e.type === 'pointerup') {
+      addItem(held, clampIn(...toCell(e.clientX, yy), held.size[1]));
+    }
+    placeGhost(v.cx, v.cy, false);
+  }
+  if (grab.b && e.pointerId === grab.id) {
+    grab.b.vx = Math.max(-1, Math.min(1, grab.vx)) * 0.3;
+    grab.b.vy = Math.max(-1, Math.min(1, grab.vy)) * 0.3;
+    grab.b = null;
+  }
   if (e.pointerId === finger.id) finger.on = false;
   if (e.pointerId === pour.id) stopPour();
   if (e.pointerId !== drag.id) return;
@@ -699,11 +830,13 @@ canvas.addEventListener('pointercancel', release);
 let tiltOn = false;
 let tiltSign = 0;
 let tiltG = -Math.PI / 2;
+let tiltX = 0; // 左右の傾き -1..1
 function onMotion(e: DeviceMotionEvent) {
   const g = e.accelerationIncludingGravity;
   if (!g || g.x == null || g.y == null) return;
+  if (!tiltSign) tiltSign = (g.y ?? 0) > 0 ? -1 : 1;
+  tiltX = Math.max(-1, Math.min(1, (g.x * tiltSign) / 9.8));
   if (Math.hypot(g.x, g.y) < 2.5) return;
-  if (!tiltSign) tiltSign = g.y > 0 ? -1 : 1;
   tiltG = Math.atan2(g.y * tiltSign, g.x * tiltSign);
 }
 $('#tilt').addEventListener('click', async () => {
@@ -724,6 +857,8 @@ $('#tilt').addEventListener('click', async () => {
   tiltSign = 0;
   btn.setAttribute('aria-pressed', 'true');
   addEventListener('devicemotion', onMotion);
+  auto = 0;
+  say('スマホを、左右に傾けてみて。');
 });
 
 // ---------- 名付ける・鑑定 ----------
@@ -733,6 +868,7 @@ let lastName = '';
 let lastCode = '';
 
 async function doAppraise() {
+  returnTo = null;
   const input = $<HTMLInputElement>('#name');
   input.blur();
   const name = (input.value.trim() || input.placeholder.replace('たとえば、', '')).slice(0, 24);
@@ -757,32 +893,34 @@ async function doAppraise() {
   kuma.resize(st.width, st.height);
   kuma.lean = 0;
   kuma.start();
-  const verdict = appraise(cell, mirrors, TINTS[tintIdx].id, name);
   const scope = R.snapshot(cell, v, 1024);
+  const tinted = Math.max(...cell.tint) - Math.min(...cell.tint) > 0.12 ? 'color' : 'none';
+  const verdict = appraise(cell, mirrors, tinted, name, measure(scope));
   const cardP = drawCard(scope, name, verdict, DOMAIN);
   await wait(500);
+  kuma.setScope(scope);
+  kuma.peek = 0;
   await speak(say2, 'ちょっと貸して。');
+  // 万華鏡を持ち上げて、片眼鏡の目に当てる
+  await tween(1100, (t) => kuma && ((kuma.peek = t), (kuma.lean = t)), easeIO);
   sound.monocle();
-  await tween(900, (t) => kuma && (kuma.lean = t), easeIO);
-  await wait(500);
+  await wait(400);
   say2.classList.remove('show');
   await wait(350);
   say2.textContent = '……';
   say2.classList.add('show');
   sound.hum(1.1);
-  await wait(1500);
+  await wait(2200);
   const card = await cardP;
   lastCard = card;
   lastCode = code;
   $<HTMLImageElement>('#cert-img').src = card.toDataURL('image/jpeg', 0.92);
-  await tween(600, (t) => kuma && (kuma.lean = 1 - t), easeIO);
+  await tween(800, (t) => kuma && ((kuma.lean = 1 - t), (kuma.peek = 1 - t)), easeIO);
   say2.classList.remove('show');
   cert.classList.add('show');
   sound.stamp();
-  await wait(500);
-  await speak(say2, verdict.line);
   acts.classList.add('show');
-  // 鑑定書を一覧にしまう
+  // 鑑定書は出た瞬間にしまう（途中で離れても残る）
   try {
     const [blob, thumb] = await Promise.all([toBlob(card), thumbOf(card)]);
     await putCert({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, rankName: verdict.rankName, rank: verdict.rank, line: verdict.line, date: Date.now(), code, card: blob, thumb });
@@ -791,6 +929,8 @@ async function doAppraise() {
   } catch {
     $('#kept').textContent = 'この端末には、しまえませんでした。画像を保存してください。';
   }
+  await wait(500);
+  await speak(say2, verdict.line);
 }
 
 async function speak(el: HTMLElement, text: string) {
@@ -868,7 +1008,7 @@ $('#arch-grid').addEventListener('click', (e) => {
   img.src = URL.createObjectURL(current.card);
   $('#detail-date').textContent = fmtDate(current.date);
   $('#detail-del').classList.remove('armed');
-  $('#detail-del').textContent = '手放す';
+  $('#detail-del span').textContent = '手放す';
   $('#arch-detail').hidden = false;
   $('#arch-detail').scrollTop = 0;
 });
@@ -890,7 +1030,7 @@ $('#detail-del').addEventListener('click', async () => {
   // 1回目は確かめるだけ（ブラウザの確認窓は使わない）
   if (!b.classList.contains('armed')) {
     b.classList.add('armed');
-    b.textContent = 'もう一度押すと手放します';
+    b.querySelector('span')!.textContent = 'もう一度押す';
     return;
   }
   await deleteCert(current.id);
@@ -915,6 +1055,7 @@ $('#detail-look').addEventListener('click', async () => {
   lastName = rec.name;
   lastCode = current.code;
   $<HTMLInputElement>('#name').value = rec.name;
+  returnTo = current;
   history.replaceState(null, '', `#k=${current.code}`);
   document.querySelectorAll('[data-mirrors]').forEach((x) => x.setAttribute('aria-checked', String(Number((x as HTMLElement).dataset.mirrors) === mirrors)));
   await openScope();
@@ -922,8 +1063,87 @@ $('#detail-look').addEventListener('click', async () => {
 
 $('#again').addEventListener('click', () => {
   closeAppraisal();
+  returnTo = 'appraisal';
   sound.setMuffle(0.72);
   setStage('look');
+});
+
+// 鑑定書に戻る
+async function backToCert() {
+  const to = returnTo;
+  returnTo = null;
+  sound.setMuffle(0);
+  if (to === 'appraisal') {
+    stage = 'appraise';
+    body.dataset.stage = 'appraise';
+    $('#appraisal').hidden = false;
+    if (kuma) kuma.peek = 0;
+    kuma?.start();
+    return;
+  }
+  if (to) {
+    await openArchive();
+    const i = certs.findIndex((c) => c.id === to.id);
+    if (i >= 0) ($('#arch-grid').querySelector(`button[data-i="${i}"]`) as HTMLElement | null)?.click();
+  }
+  setNext();
+}
+
+// ---------- 入口へ戻る（作りかけは消さない） ----------
+let session: { cell: Cell; stage: Stage; tint: number; liquid: number; mirrors: number } | null = null;
+let introCell: Cell | null = null;
+function toIntro() {
+  if (stage === 'intro' || body.classList.contains('busy')) return;
+  sound.tick();
+  sayToken++;
+  $('#say').classList.remove('show');
+  stopPour();
+  letGo();
+  if (!shared && stage !== 'appraise') session = { cell, stage, tint: tintIdx, liquid: liquidIdx, mirrors };
+  closeAppraisal();
+  returnTo = null;
+  sound.setMuffle(0);
+  introCell ??= sample(20261029);
+  cell = introCell;
+  Object.assign(v, { mode: 1, ring: 0, edge: 1, trail: 0.3, bloom: 0.55, back: 0.02, iris: 1.3 });
+  const has = !!session && (session.cell.bodies.length > 0 || session.stage !== 'fill1');
+  $('#resume').hidden = !has;
+  $('#start').classList.toggle('ghost', has || !!shared);
+  $('#start .cta-label').textContent = shared ? '自分もつくる' : has ? 'あたらしくつくる' : 'つくる';
+  setStage('intro');
+  refreshArchCount();
+}
+$('#home').addEventListener('click', toIntro);
+$('#resume').addEventListener('click', async () => {
+  if (!session) return;
+  sound.unlock();
+  sound.tick();
+  const s = session;
+  session = null;
+  $('#resume').hidden = true;
+  body.classList.add('busy');
+  await tween(350, (t) => (v.fade = 1 - t));
+  cell = s.cell;
+  tintIdx = s.tint;
+  liquidIdx = s.liquid;
+  mirrors = s.mirrors;
+  buildLiquids();
+  if (s.stage === 'fill1' || s.stage === 'fill2') {
+    Object.assign(v, { mode: 0, ring: 1, edge: 0, trail: 0, back: 0.028, bloom: 0.7 });
+    cell.angle = 0;
+    cell.flat = true;
+    cell.gs = 0;
+  } else {
+    Object.assign(v, { mode: 1, ring: 0, edge: 1, trail: 0.3, back: 0.02, bloom: 0.55, iris: 1.08 });
+    sound.setMuffle(0.72);
+  }
+  setStage(s.stage);
+  layout();
+  Object.assign(v, { R: goal.R, cx: goal.cx, cy: goal.cy });
+  updateCount();
+  updateAmount();
+  await tween(450, (t) => (v.fade = t), easeO);
+  body.classList.remove('busy');
 });
 $('#restart').addEventListener('click', () => {
   closeAppraisal();
@@ -978,6 +1198,7 @@ $('#next').addEventListener('click', () => {
     sound.setMuffle(0);
     return toWindow();
   }
+  if (returnTo && stage === 'look') return backToCert();
   if (stage === 'fill1') {
     setStage('fill2');
     updateAmount();
@@ -998,6 +1219,7 @@ document.querySelectorAll<HTMLElement>('.steps li').forEach((li, i) =>
   li.addEventListener('click', () => {
     if (!li.classList.contains('done')) return;
     const to = ORDER[i];
+    returnTo = null;
     sound.tick();
     if (to === 'fill1' || to === 'fill2') {
       sound.setMuffle(0);
@@ -1042,6 +1264,10 @@ function frame(now: number) {
       auto -= dt;
       const target = 0.26 * Math.min(1, auto / 1.5);
       angVel += (target - angVel) * Math.min(1, dt * 2);
+    } else if (tiltOn && (stage === 'look' || stage === 'name')) {
+      // 傾けている向きに、傾けた深さの分だけ回る
+      const dz = Math.abs(tiltX) < 0.08 ? 0 : (tiltX - Math.sign(tiltX) * 0.08) / 0.92;
+      angVel += (-dz * 1.6 - angVel) * Math.min(1, dt * 3);
     } else if (stage === 'intro') {
       angVel += (0.12 - angVel) * Math.min(1, dt * 0.8);
     } else {
@@ -1056,14 +1282,22 @@ function frame(now: number) {
   guide = Math.max(0, guide - dt);
   v.guide = Math.min(1, guide / 0.6) * (stage === 'fill1' ? 1 : 0);
   // 重力：寝かせている間は 0、立てたらゆっくり効いてくる
-  cell.gs = cell.flat ? 0 : Math.min(1, cell.gs + dt * 0.6);
+  // のぞいてからの重力は弱め：置いたレイアウトを崩しすぎない（はちみつはほぼ動かず、水は少し流れる）
+  const gsGoal = cell.flat ? 0 : cell.liquid ? ({ water: 0.3, oil: 0.13, honey: 0.05 } as const)[cell.liquid.id] : 0.2;
+  // 傾けている間は、中身が傾けた側へとろっと流れる
+  const tiltBoost = tiltOn && !cell.flat ? Math.min(1, Math.abs(tiltX) * 1.8) * 0.55 : 0;
+  cell.gs += (Math.max(gsGoal, tiltBoost) - cell.gs) * Math.min(1, dt * 0.8);
+  // つまんでいる粒は指についてくる
+  if (grab.b) Object.assign(grab.b, { x: grab.x, y: grab.y, vx: 0, vy: 0 });
   // 指と、注ぐ流れが粒を押す
   cell.pokes.length = 0;
   if (finger.on) cell.pokes.push({ x: finger.x, y: finger.y, vx: finger.vx, vy: finger.vy, r: 0.07, k: 14 });
   if (pour.on && cell.liquid) {
     const L = cell.liquid;
+    const before = cell.levelTarget;
     cell.levelTarget = Math.min(1, cell.levelTarget + POUR_RATE[L.id] * dt);
     cell.level = cell.levelTarget;
+    cell.pourIn(bottleColor(), cell.levelTarget - before);
     cell.pokes.push({ x: pour.x, y: 0.05, vx: 0, vy: 0, r: 0.12 + (L.id === 'honey' ? 0.06 : 0), k: L.id === 'honey' ? 3 : 7 });
     if (cell.levelTarget >= 1) {
       stopPour();
@@ -1097,28 +1331,18 @@ function frame(now: number) {
       }
     sound.flow(cnt ? Math.min(1, (sm / cnt) * 6) * Math.min(1, cnt / 80) : 0);
   }
-  // 鏡は、ビーズが集まっているほうへゆっくり向く
+  // 鏡の向きは重力の向き（下）に固定。置いた場所がそのまま模様の場所になる
   {
-    let sx = 0;
-    let sy = 0;
-    const ca = Math.cos(cell.angle);
-    const sa = Math.sin(cell.angle);
-    for (const b of cell.bodies) {
-      const m = b.small ? b.r * b.r * 0.3 : b.r * b.r;
-      sx += (b.x * ca - b.y * sa) * m;
-      sy += (b.x * sa + b.y * ca) * m;
-    }
-    const target = Math.hypot(sx, sy) > 1e-4 ? Math.atan2(sy, sx) : cell.gdir;
-    let dw = target - v.wedge;
+    let dw = -Math.PI / 2 - v.wedge;
     dw = Math.atan2(Math.sin(dw), Math.cos(dw));
-    v.wedge += dw * Math.min(1, dt * 0.8);
+    v.wedge += dw * Math.min(1, dt * 3);
   }
   // 位置
   const k = 1 - Math.exp(-dt * 7);
   v.R += (goal.R - v.R) * k;
   v.cx += (goal.cx - v.cx) * k;
   v.cy += (goal.cy - v.cy) * k;
-  v.tint = TINTS[tintIdx].rgb;
+  v.tint = cell.liquid && cell.vol > 0 ? cell.tint : [1, 1, 1];
   v.mirrors = stage === 'intro' ? 8 : mirrors;
   const L = cell.liquid;
   R.drawChamber(cell, v, L ? { film: L.film, wobble: L.wobble } : null);
@@ -1130,7 +1354,8 @@ function frame(now: number) {
       tilt: easeIO(Math.min(1, tilt)),
       level: cell.liquid ? cell.level : 0,
       liquid: cell.liquid?.id ?? null,
-      tint: TINTS[tintIdx].rgb,
+      cellCol: cell.vol > 0 ? cell.tint : bottleColor(),
+      bottleCol: bottleColor(),
       pouring: pour.on,
       pourX: pour.on ? pour.x : 0.2,
       time: R.time,
@@ -1185,7 +1410,7 @@ function boot() {
     if (dev === 'og') body.classList.add('og');
     v.back = v.mode ? 0.02 : 0.028;
     cell.flat = !v.mode;
-    cell.gs = v.mode ? 1 : 0;
+    cell.gs = v.mode ? 0.1 : 0;
     v.iris = 1.08;
     if (dev === 'fill1') cell.liquid = null;
     if (dev !== 'fill1') liquidIdx = 1;
