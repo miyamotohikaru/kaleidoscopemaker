@@ -20,6 +20,14 @@ const CHARM_LINE = '……ぼく、映ってる。';
 const EMPTY_LINE = '……なにも、\n入ってないよ。';
 const BROWN_LINE = '……これ、茶色いね。';
 const WHITE_LINE = 'まぶしい。\n……目、閉じていい？';
+// 失敗の一言（作るときに起きること）
+const FAIL_LINES: Record<string, string> = {
+  cloud: '……水と油、\n混ざらないんだよ。',
+  murk: '色、混ぜすぎたかも。\n……泥水みたい。',
+  smudge: '指のあと、ついてる。\n……ぼくのじゃないよ。',
+  air: '泡、入ってる。\n……まあ、それも景色か。',
+  packed: 'ぎゅうぎゅう。\n……動けないって。',
+};
 
 // 映った万華鏡の画像から測る
 export interface Look {
@@ -74,6 +82,7 @@ export interface Verdict {
   rankName: string;
   line: string;
   pos: number; // 0..1 ランクの棒の上の位置
+  fail: string | null; // いちばん大きい失敗
 }
 
 function hash(s: string) {
@@ -109,6 +118,18 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   s -= 70 * Math.max(0, look.white - 0.18);
   const h = hash(name.trim() || '無題');
   s += ((h % 1000) / 1000 - 0.5) * 16;
+  // 作るときの失敗
+  const air = cell.liquid ? 1 - cell.levelTarget : 0;
+  const fails: [string, number][] = [
+    ['cloud', cell.cloud],
+    ['murk', cell.murk],
+    ['smudge', cell.smudge],
+    ['air', air > 0.3 ? air : 0],
+    ['packed', n >= 40 ? (n - 36) / 12 : 0],
+  ];
+  for (const [, v] of fails) s -= 38 * v;
+  const worst = fails.sort((a, b) => b[1] - a[1])[0];
+  const fail = worst[1] > 0.25 ? worst[0] : null;
   const empty = (n === 0 && small === 0) || look.coverage < 0.08;
   if (empty) s = Math.min(s, 8);
   s = Math.max(0, Math.min(100, s));
@@ -118,10 +139,12 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   let line = pool[(h >>> 10) % pool.length];
   if (hasCharm && rank >= 3 && (h >>> 4) % 3 === 0) line = CHARM_LINE;
   // 低いときは、理由がわかる一言
+  if (rank <= 2 && fail) line = FAIL_LINES[fail];
   if (rank <= 1) {
     if (empty) line = EMPTY_LINE;
+    else if (fail) line = FAIL_LINES[fail];
     else if (look.brown > 0.3) line = BROWN_LINE;
     else if (look.white > 0.3) line = WHITE_LINE;
   }
-  return { score: s, rank, rankName: RANKS[rank], line, pos: s / 100 };
+  return { score: s, rank, rankName: RANKS[rank], line, pos: s / 100, fail };
 }

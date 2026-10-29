@@ -4,7 +4,7 @@ import { Cell, mulberry, type Body } from './sim';
 import { Renderer, type ViewState } from './render';
 import { sound } from './audio';
 import { Mortar, type PhotoPiece } from './mortar';
-import { appraise, measure } from './appraise';
+import { appraise, measure, RANKS } from './appraise';
 import { drawCard } from './card';
 import { decode, dust, encode } from './share';
 import { Kuma3D, preloadKuma } from './kuma3d';
@@ -617,12 +617,14 @@ const easeIO = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2
 const easeO = (t: number) => 1 - Math.pow(1 - t, 3);
 
 let auto = 0; // 自動で回る残り時間
+let touchTime = 0;
 // 鑑定書から「もう一度のぞく」で来たとき、戻る先
 let returnTo: null | 'appraisal' | Cert = null;
 let tilt = 0;
 let pour3d: Pour3D | null = null;
 async function toWindow() {
   returnTo = null;
+  touchTime = 0;
   session = null;
   $('#resume').hidden = true;
   body.classList.add('busy');
@@ -896,10 +898,15 @@ async function doAppraise() {
   const scope = R.snapshot(cell, v, 1024);
   const tinted = Math.max(...cell.tint) - Math.min(...cell.tint) > 0.12 ? 'color' : 'none';
   const verdict = appraise(cell, mirrors, tinted, name, measure(scope));
+  if (import.meta.env.DEV) {
+    const force = new URLSearchParams(location.search).get('rank');
+    if (force) Object.assign(verdict, { rank: +force, rankName: RANKS[+force], pos: (+force + 0.5) / 7 });
+  }
   const cardP = drawCard(scope, name, verdict, DOMAIN);
   await wait(500);
   kuma.setScope(scope);
   kuma.peek = 0;
+  kuma.react(0);
   await speak(say2, 'ちょっと貸して。');
   // 万華鏡を持ち上げて、片眼鏡の目に当てる
   await tween(1100, (t) => kuma && ((kuma.peek = t), (kuma.lean = t)), easeIO);
@@ -919,6 +926,8 @@ async function doAppraise() {
   say2.classList.remove('show');
   cert.classList.add('show');
   sound.stamp();
+  sound.verdict(verdict.rank);
+  kuma.react(verdict.rank >= 5 ? 1 : verdict.rank <= 1 ? -1 : 0);
   acts.classList.add('show');
   // 鑑定書は出た瞬間にしまう（途中で離れても残る）
   try {
@@ -1287,6 +1296,11 @@ function frame(now: number) {
   // 傾けている間は、中身が傾けた側へとろっと流れる
   const tiltBoost = tiltOn && !cell.flat ? Math.min(1, Math.abs(tiltX) * 1.8) * 0.55 : 0;
   cell.gs += (Math.max(gsGoal, tiltBoost) - cell.gs) * Math.min(1, dt * 0.8);
+  // 筒の中を触りすぎると、ガラスに指のあとがつく
+  if (stage === 'fill1' && (finger.on || grab.b)) {
+    touchTime += dt;
+    cell.smudge = Math.max(cell.smudge, Math.min(1, (touchTime - 8) / 14));
+  }
   // つまんでいる粒は指についてくる
   if (grab.b) Object.assign(grab.b, { x: grab.x, y: grab.y, vx: 0, vy: 0 });
   // 指と、注ぐ流れが粒を押す
@@ -1297,7 +1311,7 @@ function frame(now: number) {
     const before = cell.levelTarget;
     cell.levelTarget = Math.min(1, cell.levelTarget + POUR_RATE[L.id] * dt);
     cell.level = cell.levelTarget;
-    cell.pourIn(bottleColor(), cell.levelTarget - before);
+    cell.pourIn(bottleColor(), cell.levelTarget - before, L.id);
     cell.pokes.push({ x: pour.x, y: 0.05, vx: 0, vy: 0, r: 0.12 + (L.id === 'honey' ? 0.06 : 0), k: L.id === 'honey' ? 3 : 7 });
     if (cell.levelTarget >= 1) {
       stopPour();

@@ -19,6 +19,8 @@ export class Kuma3D {
   t0 = performance.now();
   lean = 0; // 1 = のぞきこむ
   peek = 0; // 1 = 万華鏡を目に当てている
+  mood = 0; // 結果への反応：+ 小さく跳ねる / - がっかり
+  moodT = 0;
   tube = new THREE.Group();
   spin = new THREE.Group();
   endMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
@@ -68,6 +70,11 @@ export class Kuma3D {
     });
   }
 
+  react(m: number) {
+    this.mood = m;
+    this.moodT = (performance.now() - this.t0) / 1000;
+  }
+
   // 筒の先に、その人の万華鏡を映す
   setScope(c: HTMLCanvasElement) {
     this.endTex?.dispose();
@@ -109,6 +116,21 @@ export class Kuma3D {
     this.root.rotation.z = -k * 0.1;
     this.root.position.z = l * 0.45;
     this.root.position.y = Math.sin(t * 0.9) * 0.012 - l * 0.06;
+    // 結果への反応（ふだんは無表情。体と間で出す）
+    const rt = t - this.moodT;
+    if (this.mood > 0 && rt < 1.6) {
+      // 小さく2回跳ねる
+      const hop = Math.abs(Math.sin(rt * Math.PI * 2.5)) * Math.max(0, 1 - rt / 1.6);
+      this.root.position.y += hop * 0.16 * this.mood;
+      this.root.rotation.z += Math.sin(rt * 12) * 0.04 * hop;
+    } else if (this.mood < 0) {
+      // がっくり：前に首を落として、少し沈む
+      const k2 = Math.min(1, rt / 0.8);
+      const e2 = 1 - Math.pow(1 - k2, 3);
+      this.root.rotation.x += 0.22 * e2 * -this.mood;
+      this.root.position.y -= 0.07 * e2 * -this.mood;
+      this.root.rotation.y *= 0.4;
+    }
     // 筒：右手のあたりから持ち上がって、片眼鏡の目に当たる
     this.tube.visible = k > 0.01;
     if (this.tube.visible) {

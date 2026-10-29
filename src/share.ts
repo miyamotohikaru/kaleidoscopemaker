@@ -20,11 +20,12 @@ const q = (v: number, lo: number, hi: number) => Math.max(0, Math.min(255, Math.
 const dq = (b: number, lo: number, hi: number) => lo + (b / 255) * (hi - lo);
 
 export function encode(cell: Cell, r: Recipe): string {
-  const out: number[] = [3];
+  const out: number[] = [4];
   out.push(MIRRORS.indexOf(r.mirrors as 6) | (r.liquid << 2) | (r.tint << 4));
   out.push(q(((cell.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2), 0, Math.PI * 2));
   out.push(q(cell.liquid ? cell.levelTarget : 0, 0, 1));
   out.push(...cell.tint.map((c) => q(c, 0, 1)));
+  out.push(q(cell.murk, 0, 1), q(cell.cloud, 0, 1), q(cell.smudge, 0, 1));
   const big = cell.bodies.filter((b) => !b.small && b.kind !== Kind.Photo).slice(0, 60);
   out.push(big.length);
   for (const b of big) {
@@ -45,12 +46,17 @@ export function decode(s: string, cell: Cell, rnd: () => number): Recipe | null 
     const u = unb64(s);
     let i = 0;
     const ver = u[i++];
-    if (ver < 1 || ver > 3) return null;
+    if (ver < 1 || ver > 4) return null;
     const m = u[i++];
     const rec: Recipe = { mirrors: MIRRORS[m & 3] ?? 8, liquid: Math.min(2, (m >> 2) & 3), tint: Math.min(TINTS.length - 1, (m >> 4) & 7), name: '' };
     cell.angle = dq(u[i++], 0, Math.PI * 2);
     const level = ver >= 2 ? u[i++] / 255 : 1;
     const tint = ver >= 3 ? [u[i++] / 255, u[i++] / 255, u[i++] / 255] : null;
+    if (ver >= 4) {
+      cell.murk = u[i++] / 255;
+      cell.cloud = u[i++] / 255;
+      cell.smudge = u[i++] / 255;
+    }
     const n = u[i++];
     cell.bodies = [];
     for (let k = 0; k < n; k++) {

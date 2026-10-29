@@ -505,6 +505,23 @@ export class Sound {
     this.glass(t + 0.09, 5274, 0.02, o, 1.4);
   }
 
+  // 結果の音：上手ならガラスの和音、失敗なら鈍い「ぽす」
+  verdict(rank: number) {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime + 0.25;
+    const o = this.out(0, 1.4);
+    if (rank >= 5) {
+      const notes = rank >= 6 ? [1046.5, 1318.5, 1568, 2093, 2637, 3136] : [1046.5, 1318.5, 1568, 2093];
+      notes.forEach((f, i) => this.glass(t + i * 0.11, f, 0.05, o, 2.4));
+      if (rank >= 6) this.tone(t, 261.6, 2.2, 0.05, o);
+    } else if (rank <= 1) {
+      this.noise(t, 0.18, 260, 0.7, 0.16, o, 'lowpass', 0.004);
+      this.tone(t, 110, 0.3, 0.12, o, 70);
+      this.tone(t + 0.22, 196, 0.35, 0.05, o, 185);
+      this.tone(t + 0.5, 164.8, 0.5, 0.05, o, 150);
+    }
+  }
+
   // 判子：ぽん
   stamp() {
     if (!this.ctx || !this.enabled) return;

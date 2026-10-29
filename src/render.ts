@@ -122,6 +122,8 @@ export class Renderer {
       uWobble: { value: 0 },
       uHasLiquid: { value: 0 },
       uNet: { value: 0 },
+      uMurk: { value: 0 },
+      uCloud: { value: 0 },
     });
     this.mats.view = mk(S.viewFrag, {
       uChamber: { value: null },
@@ -139,6 +141,7 @@ export class Renderer {
       uRing: { value: 1 },
       uStretch: { value: 1 },
       uGuide: { value: 0 },
+      uSmudge: { value: 0 },
     });
     this.mats.edge = mk(S.edgeFrag, {
       uScene: { value: null },
@@ -303,6 +306,8 @@ export class Renderer {
     L.uWobble.value = liquid?.wobble ?? 0;
     L.uHasLiquid.value = cell.liquid ? 1 : 0;
     L.uNet.value = v.mode;
+    L.uMurk.value = cell.murk;
+    L.uCloud.value = cell.cloud;
     this.pass(this.mats.liquid, this.chamberRT);
     gl.setRenderTarget(this.chamberRT);
     gl.render(this.charmScene, this.cam);
@@ -327,6 +332,7 @@ export class Renderer {
     V.uSpan.value = v.span;
     V.uRing.value = v.ring;
     V.uGuide.value = v.guide;
+    V.uSmudge.value = cell.smudge;
     V.uStretch.value = Math.min(1.9, 0.8 / (Math.PI / v.mirrors));
     this.pass(this.mats.view, post.scene);
     this.postChain(v, post, target, scale);
