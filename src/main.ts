@@ -474,6 +474,11 @@ const KANJI = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'
 function updateAmount() {
   const el = $('#amount');
   const l = cell.liquid ? cell.levelTarget : 0;
+  // 棒のメーター：注いだ量と、筒の中で混ざった液の色
+  const f = $('#m-fill');
+  f.style.width = `${(l * 100).toFixed(1)}%`;
+  const c = cell.tint.map((x) => Math.round(255 * Math.pow(Math.min(1, x), 1 / 2.2)));
+  f.style.background = `rgb(${c.join(',')})`;
   if (l < 0.03) el.textContent = '筒の上を長押しすると、注げます';
   else if (l >= 0.995) el.textContent = 'なみなみ';
   else el.textContent = `いま ${KANJI[Math.max(1, Math.min(9, Math.round(l * 10)))]}分目`;
