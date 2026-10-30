@@ -156,10 +156,11 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
   display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 84px); grid-auto-columns: 74px;
   gap: 1px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-left: 0;
   background: var(--line); border: 1px solid var(--line); border-radius: 2px;
-  margin: 0 calc(var(--gut) * -1); border-left: 0; border-right: 0; touch-action: pan-x;
+  margin: 0 calc(var(--gut) * -1); border-left: 0; border-right: 0; touch-action: none;
   scrollbar-width: none;
 }
 .tray::-webkit-scrollbar { display: none; }
+.tray.free { scroll-snap-type: none; }
 .slot {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   background: radial-gradient(120% 90% at 50% 35%, #1a1416 0%, #0c0a0b 70%);

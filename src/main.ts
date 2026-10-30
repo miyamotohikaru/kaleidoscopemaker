@@ -181,42 +181,79 @@ async function buildTray() {
   tray.innerHTML = html.join('');
   // つまんで上へすべらせ、筒の好きな場所で離す（指で隠れないよう、少し上に浮かせて運ぶ）
   const LIFT = 40;
-  const pick = { id: -1, el: null as HTMLElement | null, sx: 0, sy: 0, ghost: null as HTMLImageElement | null, it: null as Item | null };
+  // 横スクロールもこちらで受け持つ（ブラウザに任せると、斜めに引いたときに「スクロール」と判定されて運べなくなる）
+  const pick = { id: -1, el: null as HTMLElement | null, sx: 0, sy: 0, ghost: null as HTMLImageElement | null, it: null as Item | null, scroll: false, left: 0, lx: 0, lt: 0, vel: 0 };
   let noClick = 0;
+  let glide = 0;
   tray.addEventListener('pointerdown', (e) => {
-    const el = (e.target as HTMLElement).closest('.slot[data-id]') as HTMLElement | null;
-    if (!el) return;
-    Object.assign(pick, { id: e.pointerId, el, sx: e.clientX, sy: e.clientY, ghost: null, it: SHELF.find((s) => s.id === el.dataset.id) ?? null });
+    const el = (e.target as HTMLElement).closest('.slot') as HTMLElement | null;
+    cancelAnimationFrame(glide);
+    tray.classList.remove('free');
+    Object.assign(pick, {
+      id: e.pointerId, el, sx: e.clientX, sy: e.clientY, ghost: null, scroll: false,
+      it: el?.dataset.id ? SHELF.find((s) => s.id === el.dataset.id) ?? null : null,
+      left: tray.scrollLeft, lx: e.clientX, lt: performance.now(), vel: 0,
+    });
   });
   tray.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== pick.id || !pick.el || !pick.it) return;
+    if (e.pointerId !== pick.id) return;
     const dx = e.clientX - pick.sx;
     const dy = e.clientY - pick.sy;
-    if (!pick.ghost) {
-      // 上向きに動いたら持ち上げる。横向きなら棚のスクロールに任せる
-      if (-dy < 8 || -dy < Math.abs(dx) * 0.7) return;
-      sound.unlock();
-      sound.slide();
-      const g = document.createElement('img');
-      g.className = 'drag-ghost';
-      g.src = pick.el.querySelector('img')!.src;
-      document.body.appendChild(g);
-      pick.ghost = g;
-      pick.el.classList.add('holding');
-      tray.setPointerCapture(e.pointerId);
+    if (pick.scroll) {
+      tray.scrollLeft = pick.left - dx;
+      const now = performance.now();
+      pick.vel = pick.vel * 0.6 + ((pick.lx - e.clientX) / Math.max(8, now - pick.lt)) * 0.4;
+      pick.lx = e.clientX;
+      pick.lt = now;
+      return;
     }
+    if (!pick.ghost) {
+      // 上へ動いたら持ち上げる。横へ動いたら棚を送る
+      if (pick.it && -dy >= 8 && -dy >= Math.abs(dx) * 0.5) {
+        sound.unlock();
+        sound.slide();
+        const g = document.createElement('img');
+        g.className = 'drag-ghost';
+        g.src = pick.el!.querySelector('img')!.src;
+        document.body.appendChild(g);
+        pick.ghost = g;
+        pick.el!.classList.add('holding');
+        tray.setPointerCapture(e.pointerId);
+      } else if (Math.abs(dx) >= 8) {
+        pick.scroll = true;
+        pick.sx = e.clientX;
+        tray.classList.add('free');
+        pick.lx = e.clientX;
+        tray.setPointerCapture(e.pointerId);
+        return;
+      } else return;
+    }
+    const it = pick.it!;
     const gy = e.clientY - LIFT;
     const over = Math.hypot(e.clientX - v.cx, gy - v.cy) < v.R * 0.98;
     // 筒の上では、実際に入る大きさまで縮む
-    const sz = over ? ghostSize(pick.it) : 64;
-    pick.ghost.style.width = pick.ghost.style.height = sz + 'px';
-    pick.ghost.style.transform = `translate(${e.clientX - sz / 2}px, ${gy - sz / 2}px)`;
-    pick.ghost.classList.toggle('over', over);
+    const sz = over ? ghostSize(it) : 64;
+    pick.ghost!.style.width = pick.ghost!.style.height = sz + 'px';
+    pick.ghost!.style.transform = `translate(${e.clientX - sz / 2}px, ${gy - sz / 2}px)`;
+    pick.ghost!.classList.toggle('over', over);
   });
   const drop = (e: PointerEvent) => {
     if (e.pointerId !== pick.id) return;
     const g = pick.ghost;
     pick.id = -1;
+    if (pick.scroll) {
+      // 離したあとも少し滑る
+      noClick = performance.now();
+      let vel = pick.vel * 16;
+      const step = () => {
+        vel *= 0.94;
+        tray.scrollLeft += vel;
+        if (Math.abs(vel) > 0.3) glide = requestAnimationFrame(step);
+        else tray.classList.remove('free'); // 止まったら升目にそろえる
+      };
+      glide = requestAnimationFrame(step);
+      return;
+    }
     pick.el?.classList.remove('holding');
     if (!g || !pick.it) return;
     noClick = performance.now();
@@ -862,7 +899,9 @@ async function doAppraise() {
   kuma.start();
   const scope = R.snapshot(cell, v, 1024);
   const tinted = Math.max(...cell.tint) - Math.min(...cell.tint) > 0.12 ? 'color' : 'none';
-  const verdict = appraise(cell, mirrors, tinted, name, measure(scope));
+  const look = measure(scope);
+  const verdict = appraise(cell, mirrors, tinted, name, look);
+  if (import.meta.env.DEV) console.log('appraise', JSON.stringify({ look, score: Math.round(verdict.score), rank: verdict.rankName }));
   if (import.meta.env.DEV) {
     const force = new URLSearchParams(location.search).get('rank');
     if (force) Object.assign(verdict, { rank: +force, rankName: RANKS[+force], pos: (+force + 0.5) / 7 });
