@@ -18,6 +18,7 @@ const LINES: string[][] = [
 ];
 const CHARM_LINE = '……ぼく、映ってる。';
 const EMPTY_LINE = '……なにも、\n入ってないよ。';
+const DARK_LINE = '……暗くて、\nよく見えない。';
 const BROWN_LINE = '……これ、茶色いね。';
 const WHITE_LINE = 'まぶしい。\n……目、閉じていい？';
 // 失敗の一言（作るときに起きること）
@@ -31,7 +32,8 @@ const FAIL_LINES: Record<string, string> = {
 
 // 映った万華鏡の画像から測る
 export interface Look {
-  coverage: number; // 光っている面積
+  lit: number; // はっきり見えている面積（暗いガラスの筋や、ぼんやりした光は数えない）
+  coverage: number; // 少しでも光っている面積
   brown: number; // 茶色く濁った割合
   white: number; // 白く飛んだ割合
   hues: number; // はっきり出ている色の数
@@ -45,6 +47,7 @@ export function measure(c: HTMLCanvasElement): Look {
   const d = x.getImageData(0, 0, N, N).data;
   let inside = 0, lit = 0, brown = 0, white = 0;
   const bins = new Array(12).fill(0);
+  let shown = 0;
   let sat = 0;
   for (let y = 0; y < N; y++)
     for (let i = 0; i < N; i++) {
@@ -55,6 +58,7 @@ export function measure(c: HTMLCanvasElement): Look {
       const r = d[k] / 255, g = d[k + 1] / 255, b = d[k + 2] / 255;
       const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
       const l = 0.3 * r + 0.59 * g + 0.11 * b;
+      if (l >= 0.22) shown++;
       if (l < 0.09) continue;
       lit++;
       if (mn > 0.9) white++;
@@ -73,7 +77,7 @@ export function measure(c: HTMLCanvasElement): Look {
       }
     }
   const hues = sat ? bins.filter((n) => n / sat > 0.05).length : 0;
-  return { coverage: inside ? lit / inside : 0, brown: lit ? brown / lit : 0, white: lit ? white / lit : 0, hues };
+  return { lit: inside ? shown / inside : 0, coverage: inside ? lit / inside : 0, brown: lit ? brown / lit : 0, white: lit ? white / lit : 0, hues };
 }
 
 export interface Verdict {
@@ -112,7 +116,7 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   s += tint === 'none' ? 1 : 3;
   if (hasCharm) s += 2;
   // 見え方（実際に映ったもの）
-  s += 32 * bell(look.coverage, 0.62, 0.3);
+  s += 32 * Math.min(1, look.lit / 0.35);
   s += 22 * bell(look.hues, 5, 2.6);
   s -= 90 * Math.max(0, look.brown - 0.22);
   s -= 70 * Math.max(0, look.white - 0.18);
@@ -130,8 +134,11 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   for (const [, v] of fails) s -= 38 * v;
   const worst = fails.sort((a, b) => b[1] - a[1])[0];
   const fail = worst[1] > 0.25 ? worst[0] : null;
-  const empty = (n === 0 && small === 0) || look.coverage < 0.08;
+  const empty = (n === 0 && small === 0) || look.lit < 0.02;
   if (empty) s = Math.min(s, 8);
+  // のぞいても、ほとんど何も見えないなら、中身がよくても上がらない
+  s = Math.min(s, 4 + look.lit * 170);
+  const dark = look.lit < 0.15;
   s = Math.max(0, Math.min(100, s));
   let rank = 0;
   for (let i = 0; i < EDGES.length; i++) if (s >= EDGES[i]) rank = i;
@@ -143,6 +150,7 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   if (rank <= 1) {
     if (empty) line = EMPTY_LINE;
     else if (fail) line = FAIL_LINES[fail];
+    else if (dark) line = DARK_LINE;
     else if (look.brown > 0.3) line = BROWN_LINE;
     else if (look.white > 0.3) line = WHITE_LINE;
   }
