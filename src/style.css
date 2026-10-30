@@ -113,6 +113,7 @@ body:not([data-stage='intro']) .intro { opacity: 0; transform: translateY(16px);
 .cta + .cta { margin-top: 10px; }
 .cta:active { background: rgba(196, 161, 95, 0.2); }
 .cta[disabled] { opacity: 0.35; pointer-events: none; }
+.cta.wait { opacity: 0.35; }
 .cta-num { font-family: var(--lat); font-style: italic; font-size: 17px; color: var(--brass); letter-spacing: 0; width: 28px; }
 .cta-label { flex: 1; text-align: center; padding-right: 28px; }
 .cta-line { position: absolute; right: 20px; top: 50%; width: 22px; height: 1px; background: var(--brass); }
