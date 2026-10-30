@@ -16,6 +16,9 @@ interface P {
   every: 1 | 2; // 1文字ずつの声で、何文字に1回鳴らすか
   wave: OscillatorType;
   volume: number;
+  crush: number; // 機械っぽさ：音を粗くする（ビットを落とす・サンプルを間引く） 0..1
+  ring: number; // ロボ声：低い音で声を細かく震わせる（リング変調） 0..1
+  stiff: number; // 音の動きのかたさ：1 で高さ・口の形が段々に跳ぶ 0..1
 }
 
 const PRESETS: { id: string; label: string; note: string; p: P }[] = [
@@ -23,43 +26,73 @@ const PRESETS: { id: string; label: string; note: string; p: P }[] = [
     id: 'mogo',
     label: 'もごもご',
     note: 'いまのサイトの声。ひと息ごとに、こもった低い声でつぶやく。',
-    p: { kind: 'murmur', pitch: 132, speed: 120, bright: 1500, mouth: 1, breath: 0.3, wobble: 0.3, melody: 0, drop: 0.5, every: 1, wave: 'sawtooth', volume: 0.8 },
+    p: { kind: 'murmur', pitch: 132, speed: 120, bright: 1500, mouth: 1, breath: 0.3, wobble: 0.3, melody: 0.0, drop: 0.5, every: 1, wave: 'sawtooth', volume: 0.8, crush: 0, ring: 0, stiff: 0 },
+  },
+  {
+    id: 'robo',
+    label: 'ロボット',
+    note: '平らな高さで、声を細かく震わせた機械の声。',
+    p: { kind: 'murmur', pitch: 118, speed: 120, bright: 3200, mouth: 1, breath: 0, wobble: 0, melody: 0, drop: 0, every: 1, wave: 'square', volume: 0.75, crush: 0.45, ring: 0.7, stiff: 1 },
+  },
+  {
+    id: 'speak',
+    label: '古い合成音声',
+    note: '昔の、文字を読み上げるおもちゃのような粗い声。',
+    p: { kind: 'murmur', pitch: 112, speed: 125, bright: 3800, mouth: 1.05, breath: 0, wobble: 0, melody: 0.25, drop: 0.3, every: 1, wave: 'sawtooth', volume: 0.75, crush: 0.75, ring: 0, stiff: 1 },
+  },
+  {
+    id: 'piko',
+    label: 'ピコピコ',
+    note: '電子音で1文字ずつ。高さが段々に跳ぶ。',
+    p: { kind: 'blip', pitch: 520, speed: 85, bright: 4200, mouth: 1, breath: 0, wobble: 0, melody: 0.8, drop: 0.4, every: 1, wave: 'square', volume: 0.55, crush: 0.35, ring: 0, stiff: 1 },
+  },
+  {
+    id: 'vocoder',
+    label: 'ボコーダー',
+    note: '低い声を電気で包んだような、ぶーんと鳴る声。',
+    p: { kind: 'murmur', pitch: 86, speed: 130, bright: 2600, mouth: 0.95, breath: 0, wobble: 0, melody: 0.15, drop: 0.4, every: 1, wave: 'square', volume: 0.8, crush: 0.2, ring: 0.45, stiff: 0.6 },
+  },
+  {
+    id: 'beep',
+    label: '機械の返事',
+    note: 'ほぼ一定の高さの「ピッ」を2文字に1回。淡々とした機械。',
+    p: { kind: 'tone', pitch: 880, speed: 110, bright: 5000, mouth: 1, breath: 0, wobble: 0, melody: 0, drop: 0.5, every: 2, wave: 'square', volume: 0.45, crush: 0.3, ring: 0, stiff: 1 },
   },
   {
     id: 'nui',
     label: 'ぬいぐるみ',
     note: '少し高く、もっとこもらせた声。綿の中でしゃべっている感じ。',
-    p: { kind: 'murmur', pitch: 205, speed: 110, bright: 850, mouth: 1.15, breath: 0.2, wobble: 0.15, melody: 0.3, drop: 0.35, every: 1, wave: 'sawtooth', volume: 0.85 },
+    p: { kind: 'murmur', pitch: 205, speed: 110, bright: 850, mouth: 1.15, breath: 0.2, wobble: 0.15, melody: 0.15, drop: 0.35, every: 1, wave: 'sawtooth', volume: 0.85, crush: 0, ring: 0, stiff: 0 },
   },
   {
     id: 'hum',
     label: 'ハミング',
     note: '口を閉じた「んー」で、言葉の抑揚だけ伝える。',
-    p: { kind: 'hum', pitch: 150, speed: 130, bright: 700, mouth: 1, breath: 0.1, wobble: 0.2, melody: 0.55, drop: 0.6, every: 1, wave: 'triangle', volume: 0.85 },
+    p: { kind: 'hum', pitch: 150, speed: 130, bright: 700, mouth: 1, breath: 0.1, wobble: 0.2, melody: 0.275, drop: 0.6, every: 1, wave: 'triangle', volume: 0.85, crush: 0, ring: 0, stiff: 0 },
   },
   {
     id: 'whisper',
     label: 'ささやき',
     note: '声帯を使わない、息だけの声。ひそひそ話す。',
-    p: { kind: 'whisper', pitch: 150, speed: 110, bright: 2600, mouth: 1, breath: 1, wobble: 0, melody: 0, drop: 0, every: 1, wave: 'sawtooth', volume: 0.9 },
+    p: { kind: 'whisper', pitch: 150, speed: 110, bright: 2600, mouth: 1, breath: 1, wobble: 0, melody: 0.0, drop: 0, every: 1, wave: 'sawtooth', volume: 0.9, crush: 0, ring: 0, stiff: 0 },
   },
   {
     id: 'potsu',
     label: 'ぽつぽつ',
     note: 'ひとつ前の版。毛糸を巻いたピアノのような丸い音を、2文字に1回。',
-    p: { kind: 'tone', pitch: 196, speed: 125, bright: 1100, mouth: 1, breath: 0.2, wobble: 0, melody: 0.15, drop: 0.5, every: 2, wave: 'sine', volume: 0.8 },
+    p: { kind: 'tone', pitch: 196, speed: 125, bright: 1100, mouth: 1, breath: 0.2, wobble: 0, melody: 0.075, drop: 0.5, every: 2, wave: 'sine', volume: 0.8, crush: 0, ring: 0, stiff: 0 },
   },
   {
     id: 'koro',
     label: 'ころころ',
     note: '木の玉を転がしたような、短くて軽い音。1文字ずつ。',
-    p: { kind: 'blip', pitch: 330, speed: 90, bright: 2400, mouth: 1, breath: 0, wobble: 0, melody: 0.4, drop: 0.3, every: 1, wave: 'triangle', volume: 0.7 },
+    p: { kind: 'blip', pitch: 330, speed: 90, bright: 2400, mouth: 1, breath: 0, wobble: 0, melody: 0.2, drop: 0.3, every: 1, wave: 'triangle', volume: 0.7, crush: 0, ring: 0, stiff: 0 },
   },
   {
     id: 'neru',
     label: '寝言',
     note: 'とても低くて遅い。半分寝ているような、だるい声。',
-    p: { kind: 'murmur', pitch: 92, speed: 155, bright: 1100, mouth: 0.85, breath: 0.5, wobble: 0.45, melody: 0.2, drop: 0.8, every: 1, wave: 'sawtooth', volume: 0.9 },
+    p: { kind: 'murmur', pitch: 92, speed: 155, bright: 1100, mouth: 0.85, breath: 0.5, wobble: 0.45, melody: 0.1, drop: 0.8, every: 1, wave: 'sawtooth', volume: 0.9, crush: 0, ring: 0, stiff: 0 },
   },
 ];
 
@@ -108,6 +141,10 @@ let master: GainNode;
 let wet: GainNode;
 let white: AudioBuffer;
 let take: GainNode | null = null; // いまの1回ぶん（次を鳴らすときに消す）
+let takeEnd: (() => void) | null = null;
+let crushReady = false;
+// ビットを落とし、サンプルを間引く（機械っぽい粗さ）
+const CRUSH = `class C extends AudioWorkletProcessor{static get parameterDescriptors(){return[{name:'hold',defaultValue:1},{name:'bits',defaultValue:16}]}constructor(){super();this.c=0;this.v=0}process(i,o,pr){const x=i[0][0],y=o[0][0];if(!x)return true;const h=pr.hold[0],q=Math.pow(2,pr.bits[0]-1);let c=this.c,v=this.v;for(let n=0;n<y.length;n++){if(c<=0){v=Math.round(x[n]*q)/q;c=h}c--;y[n]=v}this.c=c;this.v=v;for(let k=1;k<o[0].length;k++)o[0][k].set(y);return true}}registerProcessor('crush',C)`;
 
 function audio() {
   if (ctx) {
@@ -134,6 +171,10 @@ function audio() {
   white = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const w = white.getChannelData(0);
   for (let i = 0; i < w.length; i++) w[i] = Math.random() * 2 - 1;
+  ctx.audioWorklet
+    ?.addModule(URL.createObjectURL(new Blob([CRUSH], { type: 'application/javascript' })))
+    .then(() => (crushReady = true))
+    .catch(() => {});
   // iOS：無音を1回鳴らして起こす
   const s = ctx.createBufferSource();
   s.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
@@ -144,23 +185,51 @@ function audio() {
 
 function newTake() {
   const c = audio();
-  if (take) {
-    const old = take;
-    old.gain.setTargetAtTime(0, c.currentTime, 0.03);
-    setTimeout(() => old.disconnect(), 400);
-  }
+  takeEnd?.();
   take = c.createGain();
   take.gain.value = 1;
-  take.connect(master);
-  take.connect(wet);
+  let node: AudioNode = take;
+  const stops: (() => void)[] = [];
+  if (p.crush > 0.01 && crushReady) {
+    const cr = new AudioWorkletNode(c, 'crush', { channelCount: 1, channelCountMode: 'explicit', outputChannelCount: [1] });
+    cr.parameters.get('hold')!.value = 1 + Math.round(p.crush * 12);
+    cr.parameters.get('bits')!.value = 16 - p.crush * 12;
+    node.connect(cr);
+    node = cr;
+    stops.push(() => cr.disconnect());
+  }
+  if (p.ring > 0.01) {
+    // 声の大きさを 50Hz で揺らす（ロボット声の定番）
+    const rg = c.createGain();
+    rg.gain.value = 1 - p.ring;
+    const osc = c.createOscillator();
+    osc.frequency.value = 50;
+    const og = c.createGain();
+    og.gain.value = p.ring;
+    osc.connect(og).connect(rg.gain);
+    osc.start();
+    node.connect(rg);
+    node = rg;
+    stops.push(() => osc.stop());
+  }
+  node.connect(master);
+  node.connect(wet);
+  const out = take;
+  takeEnd = () => {
+    out.gain.setTargetAtTime(0, c.currentTime, 0.03);
+    setTimeout(() => stops.forEach((f) => f()), 500);
+  };
   master.gain.value = p.volume;
   return take;
 }
 
+// かたいほど、高さや口の形がなめらかに動かず段々に跳ぶ
+const glide = (tc: number) => Math.max(0.0008, tc * (1 - p.stiff));
+
 // 文字ごとの高さの揺れ（同じ字は同じ高さ）
 function pitchOf(ch: string, i: number) {
   const k = ((ch.charCodeAt(0) * 7 + i * 3) % 7) - 3;
-  return p.pitch * Math.pow(2, (k * p.melody) / 12);
+  return p.pitch * Math.pow(2, (k * p.melody * 2) / 12);
 }
 
 function noise(c: AudioContext, t: number, dur: number) {
@@ -187,8 +256,8 @@ function phrase(out: GainNode, t: number, chars: string[], end: boolean, ask: bo
   post.frequency.value = p.bright;
   env.connect(post).connect(out);
   const srcF = (src: AudioParam) => {
-    for (let i = 0; i < vs.length; i++) src.setTargetAtTime(pitchOf(chars[i] ?? 'a', i), t + i * step, 0.03);
-    if (end) src.setTargetAtTime(p.pitch * endF, t + len - step * 0.8, 0.08);
+    for (let i = 0; i < vs.length; i++) src.setTargetAtTime(pitchOf(chars[i] ?? 'a', i), t + i * step, glide(0.03));
+    if (end) src.setTargetAtTime(p.pitch * endF, t + len - step * 0.8, glide(0.08));
   };
   const stops: AudioScheduledSourceNode[] = [];
   if (p.kind === 'murmur' || p.kind === 'whisper') {
@@ -230,8 +299,8 @@ function phrase(out: GainNode, t: number, chars: string[], end: boolean, ask: bo
     for (let i = 0; i < vs.length; i++) {
       const ti = t + i * step;
       const [a1, a2] = FORMANT[vs[i]] ?? FORMANT.n;
-      f1.frequency.setTargetAtTime(a1 * p.mouth, ti, 0.025);
-      f2.frequency.setTargetAtTime(a2 * p.mouth, ti, 0.03);
+      f1.frequency.setTargetAtTime(a1 * p.mouth, ti, glide(0.025));
+      f2.frequency.setTargetAtTime(a2 * p.mouth, ti, glide(0.03));
     }
   } else {
     // ハミング：口を閉じた「んー」
@@ -318,7 +387,7 @@ function syllable(out: GainNode, t: number, ch: string, i: number, last: boolean
     env.gain.setTargetAtTime(0.0001, t + 0.01, dur * 0.35);
     const o = c.createOscillator();
     o.type = p.wave;
-    o.frequency.setValueAtTime(f * 1.08, t);
+    o.frequency.setValueAtTime(f * (1 + 0.08 * (1 - p.stiff)), t);
     o.frequency.exponentialRampToValueAtTime(f, t + 0.03);
     const bp = c.createBiquadFilter();
     bp.type = 'bandpass';
@@ -418,6 +487,9 @@ const KNOBS: Knob[] = [
   { key: 'drop', label: '語尾', min: 0, max: 1, step: 0.01, left: 'そのまま', right: '下がる', fmt: (v) => `${Math.round(v * 100)}` },
   { key: 'wobble', label: 'ゆれ', min: 0, max: 1, step: 0.01, left: 'まっすぐ', right: 'ふるえる', fmt: (v) => `${Math.round(v * 100)}`, show: (q) => q.kind === 'murmur' || q.kind === 'hum' },
   { key: 'breath', label: '息', min: 0, max: 1, step: 0.01, left: 'なし', right: '多い', fmt: (v) => `${Math.round(v * 100)}`, show: (q) => q.kind !== 'whisper' },
+  { key: 'crush', label: '機械っぽさ', min: 0, max: 1, step: 0.01, left: 'なめらか', right: '粗い', fmt: (v) => `${Math.round(v * 100)}` },
+  { key: 'ring', label: 'ロボ声', min: 0, max: 1, step: 0.01, left: 'なし', right: 'ぶるぶる', fmt: (v) => `${Math.round(v * 100)}` },
+  { key: 'stiff', label: '動きのかたさ', min: 0, max: 1, step: 0.01, left: 'なめらか', right: 'カクカク', fmt: (v) => `${Math.round(v * 100)}` },
   { key: 'volume', label: '音量', min: 0.2, max: 1.4, step: 0.01, left: '小さい', right: '大きい', fmt: (v) => `${Math.round(v * 100)}` },
 ];
 
