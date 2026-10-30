@@ -2,7 +2,7 @@ import './style.css';
 import { GEM, Kind, LIQUIDS, MORTAR_STONES, SHELF, TINTS, type GemName, type Item } from './catalog';
 import { Cell, mulberry, type Body } from './sim';
 import { Renderer, type ViewState } from './render';
-import { sound } from './audio';
+import { sound, vowelOf } from './audio';
 import { Mortar, type PhotoPiece } from './mortar';
 import { appraise, measure, RANKS } from './appraise';
 import { drawCard } from './card';
@@ -114,22 +114,28 @@ function updateCount() {
   $('#count').textContent = String(bigCount());
 }
 
+// 入口の見本：宝石のかけらと金だけで、すき間なく詰めた結晶のような万華鏡。
+// 丸いガラス玉は入れない（鏡で伸びて飴玉のように見えるため）。真ん中は透明なかけらと金で光の芯をつくる
+const SAMPLE_CENTER = ['gold', 'm-clr', 'gold', 'm-clr', 'm-ame'];
+const SAMPLE_FIELD = ['m-sap', 'm-eme', 'm-clr', 'gold', 'm-sap', 'm-ame', 'm-clr', 'm-eme', 'gold', 'm-clr', 'm-sap'];
 function sample(seed: number) {
-  // 入口の見本：オイルに宝石を沈めたもの
   const r = mulberry(seed);
   const c = new Cell();
-  const pick = ['g-sap', 'g-sap', 'g-eme', 'g-rub', 'g-amb', 'g-clr', 'pearl', 'gold', 'gold', 'm-ame', 'm-sap', 'm-eme', 'm-clr', 'f-rose', 'f-ind', 'g-rub', 'g-sap', 'm-clr', 'pearl', 'g-eme', 'gold', 'm-sap', 'g-sap', 'm-ame', 'g-rub', 'g-amb', 'pearl', 'm-clr', 'g-eme', 'f-ivo', 'g-clr', 'm-sap', 'gold', 'g-sap'];
-  for (const [k, id] of pick.entries()) {
-    const it = SHELF.find((s) => s.id === id)!;
-    const a = r() * Math.PI * 2;
-    // 最初の数個は真ん中に（真ん中の模様になる）
-    const d = k < 5 ? 0.04 + r() * 0.16 : 0.2 + Math.sqrt(r()) * 0.65;
-    const b = makeBody(it, Math.cos(a) * d, Math.sin(a) * d, r());
-    c.add(b);
+  const add = (id: string, x: number, y: number) => c.add(makeBody(SHELF.find((s) => s.id === id)!, x, y, r()));
+  for (const [k, id] of SAMPLE_CENTER.entries()) {
+    const a = (k / SAMPLE_CENTER.length) * Math.PI * 2 + r() * 0.5;
+    const d = 0.03 + r() * 0.12;
+    add(id, Math.cos(a) * d, Math.sin(a) * d);
   }
-  for (let i = 0; i < 90; i++) c.add(dust(r() < 0.6 ? 'gold' : 'rainbow', r));
+  for (let k = 0; k < 48; k++) {
+    const a = r() * Math.PI * 2;
+    const d = 0.2 + Math.sqrt(r()) * 0.68;
+    add(SAMPLE_FIELD[k % SAMPLE_FIELD.length], Math.cos(a) * d, Math.sin(a) * d);
+  }
+  for (let i = 0; i < 160; i++) c.add(dust(i % 3 === 2 ? 'rainbow' : 'gold', r));
   c.liquid = LIQUIDS[1];
   c.level = c.levelTarget = 1;
+  c.vol = 1;
   c.flat = false;
   c.gs = 0.05;
   for (let i = 0; i < 240; i++) c.step(1 / 60, 0);
@@ -173,7 +179,8 @@ async function buildTray() {
   html.push(`<button class="slot drawer" type="button" data-drawer="photo" aria-label="写真を破片にする"><i class="knob"></i>${DRAWER_PHOTO}<span>写真</span></button>`);
   if (html.length % 2) html.push('<div class="slot filler" aria-hidden="true"></div>');
   tray.innerHTML = html.join('');
-  // つまんで上へ引き出し、筒の好きな場所で離す
+  // つまんで上へすべらせ、筒の好きな場所で離す（指で隠れないよう、少し上に浮かせて運ぶ）
+  const LIFT = 40;
   const pick = { id: -1, el: null as HTMLElement | null, sx: 0, sy: 0, ghost: null as HTMLImageElement | null, it: null as Item | null };
   let noClick = 0;
   tray.addEventListener('pointerdown', (e) => {
@@ -186,7 +193,8 @@ async function buildTray() {
     const dx = e.clientX - pick.sx;
     const dy = e.clientY - pick.sy;
     if (!pick.ghost) {
-      if (-dy < 12 || Math.abs(dy) < Math.abs(dx)) return;
+      // 上向きに動いたら持ち上げる。横向きなら棚のスクロールに任せる
+      if (-dy < 8 || -dy < Math.abs(dx) * 0.7) return;
       sound.unlock();
       sound.slide();
       const g = document.createElement('img');
@@ -194,27 +202,28 @@ async function buildTray() {
       g.src = pick.el.querySelector('img')!.src;
       document.body.appendChild(g);
       pick.ghost = g;
+      pick.el.classList.add('holding');
       tray.setPointerCapture(e.pointerId);
     }
-    const over = Math.hypot(e.clientX - v.cx, e.clientY - v.cy) < v.R * 0.98;
+    const gy = e.clientY - LIFT;
+    const over = Math.hypot(e.clientX - v.cx, gy - v.cy) < v.R * 0.98;
     // 筒の上では、実際に入る大きさまで縮む
-    const sz = over ? Math.max(14, ((pick.it.size[0] + pick.it.size[1]) / 2) * v.R * 2 * (pick.it.pinch ? 6 : 1.3)) : 64;
+    const sz = over ? ghostSize(pick.it) : 64;
     pick.ghost.style.width = pick.ghost.style.height = sz + 'px';
-    pick.ghost.style.transform = `translate(${e.clientX - sz / 2}px, ${e.clientY - sz / 2 - (over ? 0 : 30)}px)`;
+    pick.ghost.style.transform = `translate(${e.clientX - sz / 2}px, ${gy - sz / 2}px)`;
     pick.ghost.classList.toggle('over', over);
   });
   const drop = (e: PointerEvent) => {
     if (e.pointerId !== pick.id) return;
     const g = pick.ghost;
     pick.id = -1;
+    pick.el?.classList.remove('holding');
     if (!g || !pick.it) return;
     noClick = performance.now();
-    const over = Math.hypot(e.clientX - v.cx, e.clientY - v.cy) < v.R * 0.95;
+    const gy = e.clientY - LIFT;
+    const over = Math.hypot(e.clientX - v.cx, gy - v.cy) < v.R * 0.95;
     if (over && e.type === 'pointerup') {
-      const [x, y] = toCell(e.clientX, e.clientY);
-      const d = Math.hypot(x, y);
-      const lim = 0.92 - pick.it.size[1];
-      addItem(pick.it, d > lim ? [(x * lim) / d, (y * lim) / d] : [x, y]);
+      addItem(pick.it, clampIn(...toCell(e.clientX, gy), pick.it.size[1]));
       g.remove();
     } else {
       g.classList.add('back');
@@ -232,48 +241,17 @@ async function buildTray() {
       sound.slide();
       return $<HTMLInputElement>('#photo').click();
     }
-    const it = SHELF.find((s) => s.id === el.dataset.id);
-    if (it) hold(it, el);
+    // 押しただけでは入らない。上にすべらせて運ぶことを、粒が跳ねて教える
+    el.classList.remove('nudge');
+    void el.offsetWidth;
+    el.classList.add('nudge');
+    sound.tick();
+    say('上にすべらせて、筒まで運んで。');
   });
 }
 
-// ---------- 手に持って、置く場所を自分で決める ----------
-let held: Item | null = null;
-let heldGhost: HTMLImageElement | null = null;
-let heldHinted = false;
-function hold(it: Item, el: HTMLElement) {
-  if (held === it) return letGo();
-  letGo();
-  held = it;
-  el.classList.add('holding');
-  sound.slide();
-  const g = document.createElement('img');
-  g.className = 'drag-ghost held';
-  g.src = el.querySelector('img')!.src;
-  document.body.appendChild(g);
-  heldGhost = g;
-  placeGhost(v.cx, v.cy, false);
-  if (!heldHinted) {
-    heldHinted = true;
-    say('置きたいところを、押して。');
-  }
-}
-function letGo() {
-  held = null;
-  heldGhost?.remove();
-  heldGhost = null;
-  document.querySelectorAll('.slot.holding').forEach((x) => x.classList.remove('holding'));
-}
 function ghostSize(it: Item) {
   return Math.max(14, ((it.size[0] + it.size[1]) / 2) * v.R * 2 * (it.pinch ? 6 : 1.3));
-}
-function placeGhost(x: number, y: number, active: boolean) {
-  if (!heldGhost || !held) return;
-  const sz = ghostSize(held);
-  heldGhost.style.width = heldGhost.style.height = sz + 'px';
-  // 指で隠れないよう、押している間は少し上に浮かせて見せる
-  heldGhost.style.transform = `translate(${x - sz / 2}px, ${y - sz / 2 - (active ? 34 : 0)}px)`;
-  heldGhost.classList.toggle('waiting', !active);
 }
 function clampIn(x: number, y: number, r: number): [number, number] {
   const d = Math.hypot(x, y);
@@ -508,15 +486,24 @@ async function say(text: string, ms = 2600) {
   sayTimer = window.setTimeout(() => el.classList.remove('show'), ms);
 }
 
-// 1文字ずつ出し、文字ごとに声を鳴らす（どうぶつ語ふう）
+// 1文字ずつ出す。声はひと息（読点・改行まで）ごとに、ひとつながりで鳴らす
+const STEP = 0.12;
 async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () => true) {
   const chars = [...text];
   const ask = /[？?]\s*$/.test(text);
-  const lastVoiced = chars.map((c, i) => (/[\s、。，．！？…「」]/.test(c) ? -1 : i)).filter((i) => i >= 0).pop() ?? -1;
+  const BREAK = /[、。！？\n…]/;
   let shown = '';
   for (let i = 0; i < chars.length; i++) {
     if (!alive()) return;
     const c = chars[i];
+    // ひと息の頭で、そのひと息ぶんの声を出す
+    if (!BREAK.test(c) && (i === 0 || BREAK.test(chars[i - 1]))) {
+      let j = i;
+      while (j < chars.length && !BREAK.test(chars[j])) j++;
+      const vs = chars.slice(i, j).map(vowelOf).filter((x): x is string => !!x);
+      const end = !chars.slice(j).some((x) => !BREAK.test(x) && x !== ' ');
+      sound.murmur(vs, STEP, end, ask);
+    }
     shown += c;
     el.textContent = shown;
     if (c === '…') {
@@ -524,12 +511,11 @@ async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () 
       await wait(150);
       continue;
     }
-    if (c === '、' || c === '。' || c === '\n' || c === '？') {
-      await wait(c === '、' || c === '\n' ? 200 : 260);
+    if (BREAK.test(c)) {
+      await wait(c === '、' || c === '\n' ? 220 : 280);
       continue;
     }
-    sound.voice(c, i, i === lastVoiced, ask);
-    await wait(i === lastVoiced ? 220 : 125);
+    await wait(vowelOf(c) ? STEP * 1000 : 60);
   }
 }
 
@@ -548,7 +534,6 @@ function setNext() {
   $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && (!cell.liquid || cell.levelTarget < 0.05);
 }
 function setStage(s: Stage) {
-  if (s !== 'fill1') letGo();
   stage = s;
   body.dataset.stage = s;
   const k = ORDER.indexOf(s);
@@ -645,7 +630,7 @@ async function toWindow() {
   updateCount();
   await tween(600, (t) => (v.fade = t), easeO);
   body.classList.remove('busy');
-  say('好きなの、落として。');
+  say('棚から、上にすべらせて入れて。');
 }
 
 async function toLook() {
@@ -684,7 +669,6 @@ async function toLook() {
 const drag = { on: false, id: -1, last: 0, t: 0, vel: 0 };
 let angVel = 0;
 const finger = { on: false, id: -1, x: 0, y: 0, vx: 0, vy: 0, t: 0 };
-const placing = { on: false, id: -1, x: 0, y: 0 };
 const grab = { b: null as Body | null, id: -1, x: 0, y: 0, vx: 0, vy: 0, t: 0 };
 const pour = { on: false, id: -1, x: 0, amt: 0 };
 function ang(e: PointerEvent) {
@@ -710,11 +694,6 @@ canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   if (stage === 'fill1') {
     const [x, y] = toCell(e.clientX, e.clientY);
-    if (held) {
-      Object.assign(placing, { on: true, id: e.pointerId, x: e.clientX, y: e.clientY });
-      placeGhost(e.clientX, e.clientY, true);
-      return;
-    }
     // 置いた粒をつまんで動かす
     let best: Body | null = null;
     let bd = 1e9;
@@ -758,11 +737,6 @@ function pourX(clientX: number) {
   return Math.max(-0.62, Math.min(0.62, (clientX - v.cx) / v.R));
 }
 canvas.addEventListener('pointermove', (e) => {
-  if (placing.on && e.pointerId === placing.id) {
-    Object.assign(placing, { x: e.clientX, y: e.clientY });
-    placeGhost(e.clientX, e.clientY, true);
-    return;
-  }
   if (grab.b && e.pointerId === grab.id) {
     const [x, y] = clampIn(...toCell(e.clientX, e.clientY), grab.b.r);
     const now = performance.now();
@@ -805,15 +779,6 @@ function stopPour() {
   setNext();
 }
 const release = (e: PointerEvent) => {
-  if (placing.on && e.pointerId === placing.id) {
-    placing.on = false;
-    // 指の少し上（見えていた位置）に置く
-    const yy = e.clientY - 34;
-    if (held && Math.hypot(e.clientX - v.cx, yy - v.cy) < v.R * 0.98 && e.type === 'pointerup') {
-      addItem(held, clampIn(...toCell(e.clientX, yy), held.size[1]));
-    }
-    placeGhost(v.cx, v.cy, false);
-  }
   if (grab.b && e.pointerId === grab.id) {
     grab.b.vx = Math.max(-1, Math.min(1, grab.vx)) * 0.3;
     grab.b.vy = Math.max(-1, Math.min(1, grab.vy)) * 0.3;
@@ -1107,7 +1072,6 @@ function toIntro() {
   sayToken++;
   $('#say').classList.remove('show');
   stopPour();
-  letGo();
   if (!shared && stage !== 'appraise') session = { cell, stage, tint: tintIdx, liquid: liquidIdx, mirrors };
   closeAppraisal();
   returnTo = null;
