@@ -523,36 +523,27 @@ async function say(text: string, ms = 2600) {
   sayTimer = window.setTimeout(() => el.classList.remove('show'), ms);
 }
 
-// 1文字ずつ出す。声はひと息（読点・改行まで）ごとに、ひとつながりで鳴らす
+// 1文字ずつ出す。声は鳴らさず、キーボードを打つ音だけ（ASMR）。打つ間隔は人の手のように少し揺らす
 const STEP = 0.12;
 async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () => true) {
   const chars = [...text];
-  const ask = /[？?]\s*$/.test(text);
-  const BREAK = /[、。！？\n…]/;
   let shown = '';
   for (let i = 0; i < chars.length; i++) {
     if (!alive()) return;
     const c = chars[i];
-    // ひと息の頭で、そのひと息ぶんの声を出す
-    if (!BREAK.test(c) && (i === 0 || BREAK.test(chars[i - 1]))) {
-      let j = i;
-      while (j < chars.length && !BREAK.test(chars[j])) j++;
-      const vs = chars.slice(i, j).map(vowelOf).filter((x): x is string => !!x);
-      const end = !chars.slice(j).some((x) => !BREAK.test(x) && x !== ' ');
-      sound.murmur(vs, STEP, end, ask);
-    }
     shown += c;
     el.textContent = shown;
+    sound.key(c === '\n' ? 'enter' : /[\s、。！？…]/.test(c) ? 'space' : 'char');
+    const jitter = 0.75 + Math.random() * 0.5;
     if (c === '…') {
-      if (chars[i - 1] !== '…') sound.hum(0.5);
-      await wait(150);
+      await wait(150 * jitter);
       continue;
     }
-    if (BREAK.test(c)) {
-      await wait(c === '、' || c === '\n' ? 220 : 280);
+    if (/[、。！？\n]/.test(c)) {
+      await wait((c === '、' || c === '\n' ? 220 : 280) * jitter);
       continue;
     }
-    await wait(vowelOf(c) ? STEP * 1000 : 60);
+    await wait((vowelOf(c) ? STEP * 1000 : 70) * jitter);
   }
 }
 
@@ -569,6 +560,14 @@ function setNext() {
   $('#next-num').textContent = n;
   $('#next-label').textContent = l;
   $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && (!cell.liquid || cell.levelTarget < 0.05);
+  // 名前がないうちは鑑定に進めない（押すと、こすくまくんが名前を頼む）
+  $('#next').classList.toggle('wait', stage === 'name' && !named());
+}
+const named = () => $<HTMLInputElement>('#name').value.trim().length > 0;
+function tryAppraise() {
+  if (named()) return doAppraise();
+  say('名前、つけてあげて。');
+  $<HTMLInputElement>('#name').focus({ preventScroll: true });
 }
 function setStage(s: Stage) {
   stage = s;
@@ -875,7 +874,7 @@ async function doAppraise() {
   returnTo = null;
   const input = $<HTMLInputElement>('#name');
   input.blur();
-  const name = (input.value.trim() || input.placeholder.replace('たとえば、', '')).slice(0, 24);
+  const name = input.value.trim().slice(0, 24);
   lastName = name;
   const code = encode(cell, { mirrors, liquid: Math.max(0, liquidIdx), tint: tintIdx, name });
   history.replaceState(null, '', `#k=${code}`);
@@ -920,7 +919,6 @@ async function doAppraise() {
   await wait(350);
   say2.textContent = '……';
   say2.classList.add('show');
-  sound.hum(1.1);
   await wait(2200);
   const card = await cardP;
   lastCard = card;
@@ -1219,14 +1217,15 @@ $('#next').addEventListener('click', () => {
   else if (stage === 'look') {
     setStage('name');
     setTimeout(() => $<HTMLInputElement>('#name').focus({ preventScroll: true }), 380);
-  } else if (stage === 'name') doAppraise();
+  } else if (stage === 'name') tryAppraise();
 });
 $<HTMLInputElement>('#name').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.isComposing) {
     e.preventDefault();
-    doAppraise();
+    tryAppraise();
   }
 });
+$('#name').addEventListener('input', setNext);
 document.querySelectorAll<HTMLElement>('.steps li').forEach((li, i) =>
   li.addEventListener('click', () => {
     if (!li.classList.contains('done')) return;

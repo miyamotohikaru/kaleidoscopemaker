@@ -432,94 +432,27 @@ export class Sound {
     this.noise(t, 0.28, 2200, 0.7, 0.03, o, 'bandpass', 0.08);
   }
 
-  // こすくまくんの声。1文字ずつ「ぽ・ぽ・ぽ」と鳴らすのはやめて、ひと息（読点まで）を
-  // ひとつながりの「もごもご」で言う。口を閉じたまま、ぬいぐるみの中でしゃべっているような、こもった低い声。
-  // 高さはほとんど動かさず、言い終わりに少し下がる（「？」だけ上がる）。
-  murmur(vowels: string[], step: number, end: boolean, ask: boolean) {
-    if (!this.ctx || !this.enabled || !vowels.length) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime + 0.01;
-    const n = vowels.length;
-    const len = n * step;
-    const o = this.out(0, 0.5);
-    // 声帯：低いのこぎり波に、ごくわずかな揺れ
-    const src = ctx.createOscillator();
-    src.type = 'sawtooth';
-    const f0 = 132;
-    src.frequency.setValueAtTime(f0 * 1.04, t);
-    src.frequency.linearRampToValueAtTime(f0, t + Math.min(0.25, len * 0.3));
-    src.frequency.linearRampToValueAtTime(end ? (ask ? f0 * 1.22 : f0 * 0.88) : f0 * 0.97, t + len);
-    const vib = ctx.createOscillator();
-    vib.frequency.value = 5.2;
-    const vg = ctx.createGain();
-    vg.gain.value = 1.4;
-    vib.connect(vg).connect(src.frequency);
-    // 口の形（母音ごとのフォルマント）。こもらせるために上は強く削る
-    const pre = ctx.createBiquadFilter();
-    pre.type = 'lowpass';
-    pre.frequency.value = 1300;
-    pre.Q.value = 0.3;
-    src.connect(pre);
-    const f1 = ctx.createBiquadFilter();
-    const f2 = ctx.createBiquadFilter();
-    f1.type = f2.type = 'bandpass';
-    f1.Q.value = 5;
-    f2.Q.value = 7;
-    const g1 = ctx.createGain();
-    const g2 = ctx.createGain();
-    g1.gain.value = 1.0;
-    g2.gain.value = 0.35;
-    const body = ctx.createGain();
-    body.gain.value = 0.22; // 口を閉じた「ん」の成分
-    const env = ctx.createGain();
-    pre.connect(f1).connect(g1).connect(env);
-    pre.connect(f2).connect(g2).connect(env);
-    pre.connect(body).connect(env);
-    const post = ctx.createBiquadFilter();
-    post.type = 'lowpass';
-    post.frequency.value = 1500;
-    env.connect(post).connect(o);
-    // 音節ごとに口が少し開いて閉じる。強弱は小さめ（淡々と）
-    env.gain.setValueAtTime(0, t);
-    for (let i = 0; i < n; i++) {
-      const ti = t + i * step;
-      const [a1, a2] = FORMANT[vowels[i]] ?? FORMANT.n;
-      f1.frequency.setTargetAtTime(a1, ti, 0.025);
-      f2.frequency.setTargetAtTime(a2, ti, 0.03);
-      const peak = (vowels[i] === 'n' ? 0.28 : 0.4) * (i === 0 ? 1.1 : 1);
-      env.gain.setTargetAtTime(peak, ti, 0.018);
-      env.gain.setTargetAtTime(peak * 0.45, ti + step * 0.6, 0.03);
-    }
-    env.gain.setTargetAtTime(0.0001, t + len, end ? 0.07 : 0.04);
-    for (const x of [src, vib]) {
-      x.start(t);
-      x.stop(t + len + 0.4);
-    }
-    // 息を少し
-    this.noise(t, Math.min(0.5, len), 900, 0.5, 0.006, o, 'bandpass', 0.05);
-  }
-
-  // 「……」：口を閉じた低い「ん」
-  hum(len = 0.9) {
+  // こすくまくんの文字が出るときの、キーボードを打つ音（ASMR）。声は出さない。
+  // 押し始めの明るい「カ」、キーキャップの短い「コト」、底に当たる低い「とん」、指を離したときの小さな「こっ」。
+  // 1打ごとに高さと強さを少し揺らす。スペース・句読点は少し低く、改行はいちばん深い
+  key(kind: 'char' | 'space' | 'enter' = 'char') {
     if (!this.ctx || !this.enabled) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime + 0.01;
-    const o = this.out(0, 0.9);
-    const src = ctx.createOscillator();
-    src.type = 'triangle';
-    src.frequency.setValueAtTime(146.8, t);
-    src.frequency.linearRampToValueAtTime(138.6, t + len);
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 420;
-    lp.Q.value = 2;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.18, t + 0.12);
-    g.gain.setTargetAtTime(0.0001, t + len * 0.7, len * 0.2);
-    src.connect(lp).connect(g).connect(o);
-    src.start(t);
-    src.stop(t + len + 0.4);
+    const t = this.ctx.currentTime + 0.005;
+    const r = Math.random;
+    const lv = (0.8 + r() * 0.4) * (kind === 'enter' ? 1.25 : kind === 'space' ? 1.1 : 1);
+    const o = this.out((r() - 0.5) * 0.3, 0.22);
+    const tock = kind === 'enter' ? 430 : kind === 'space' ? 560 : 860 + r() * 280;
+    this.noise(t, 0.008, 1900 + r() * 500, 1.1, 0.12 * lv, o, 'bandpass', 0.0006);
+    this.tone(t + 0.001, tock, 0.026, 0.11 * lv, o, tock * 0.96);
+    const bt = t + 0.004 + r() * 0.006;
+    this.noise(bt, 0.018, 1400, 0.9, 0.15 * lv, o, 'bandpass', 0.001);
+    this.noise(bt, 0.018, 500, 0.8, 0.15 * lv, o, 'bandpass', 0.001);
+    this.tone(bt, kind === 'char' ? 150 : 118, 0.04, 0.07 * lv, o, 110);
+    // 大きいキーは、棒が小さくカタつく
+    if (kind !== 'char') this.noise(bt + 0.012, 0.04, 1800, 2, 0.025 * lv, o, 'bandpass', 0.002);
+    const ut = t + 0.045 + r() * 0.03;
+    this.noise(ut, 0.008, 2400, 1.2, 0.035 * lv, o, 'bandpass', 0.0005);
+    this.tone(ut, tock * 1.25, 0.02, 0.018 * lv, o);
   }
 
   // 片眼鏡を目に当てる：細いガラスの「ちん」
@@ -570,15 +503,6 @@ const ROWS: [string, string][] = [
   ['o', 'おこそとのほもよろをごぞどぼぽぉょオコソトノホモヨロヲゴゾドボポォョ'],
   ['n', 'んン'],
 ];
-// 母音ごとの口の形（第1・第2フォルマント, Hz）。こもった声なので少し低めに寄せている
-const FORMANT: Record<string, [number, number]> = {
-  a: [720, 1150],
-  i: [300, 1900],
-  u: [340, 1150],
-  e: [480, 1700],
-  o: [480, 820],
-  n: [260, 900],
-};
 const VOWEL = new Map<string, string>();
 for (const [v, s] of ROWS) for (const c of s) VOWEL.set(c, v);
 export function vowelOf(ch: string): string | null {
