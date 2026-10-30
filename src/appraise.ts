@@ -19,7 +19,7 @@ const LINES: string[][] = [
 const CHARM_LINE = '……ぼく、映ってる。';
 const EMPTY_LINE = '……なにも、\n入ってないよ。';
 const DARK_LINE = '……暗くて、\nよく見えない。';
-const BROWN_LINE = '……これ、茶色いね。';
+const BROWN_LINE = '……茶色っぽいね。\nちがう色も、入れてみたら？';
 const WHITE_LINE = 'まぶしい。\n……目、閉じていい？';
 // 失敗の一言（作るときに起きること）
 const FAIL_LINES: Record<string, string> = {
@@ -34,7 +34,7 @@ const FAIL_LINES: Record<string, string> = {
 export interface Look {
   lit: number; // はっきり見えている面積（暗いガラスの筋や、ぼんやりした光は数えない）
   coverage: number; // 少しでも光っている面積
-  brown: number; // 茶色く濁った割合
+  brown: number; // 茶色っぽい割合（はっきり見えている所のうち）
   white: number; // 白く飛んだ割合
   hues: number; // はっきり出ている色の数
 }
@@ -49,6 +49,7 @@ export function measure(c: HTMLCanvasElement): Look {
   const bins = new Array(12).fill(0);
   let shown = 0;
   let sat = 0;
+  let vis = 0;
   for (let y = 0; y < N; y++)
     for (let i = 0; i < N; i++) {
       const dx = (i + 0.5) / N - 0.5, dy = (y + 0.5) / N - 0.5;
@@ -70,14 +71,19 @@ export function measure(c: HTMLCanvasElement): Look {
         else h = (r - g) / (mx - mn) + 4;
         h *= 60;
       }
-      if (h >= 12 && h <= 50 && s > 0.3 && mx < 0.75) brown++;
+      // 茶色：はっきり見えている所のうち、暗めの黄〜橙。
+      // オイルのうっすらした金色や、金の粒のまわりのぼんやりした光は数えない
+      if (l >= 0.15) {
+        vis++;
+        if (h >= 12 && h <= 50 && s > 0.3 && mx < 0.55) brown++;
+      }
       if (s > 0.35) {
         bins[Math.floor(h / 30) % 12]++;
         sat++;
       }
     }
   const hues = sat ? bins.filter((n) => n / sat > 0.05).length : 0;
-  return { lit: inside ? shown / inside : 0, coverage: inside ? lit / inside : 0, brown: lit ? brown / lit : 0, white: lit ? white / lit : 0, hues };
+  return { lit: inside ? shown / inside : 0, coverage: inside ? lit / inside : 0, brown: vis ? brown / vis : 0, white: lit ? white / lit : 0, hues };
 }
 
 export interface Verdict {
@@ -118,7 +124,7 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   // 見え方（実際に映ったもの）
   s += 32 * Math.min(1, look.lit / 0.35);
   s += 22 * bell(look.hues, 5, 2.6);
-  s -= 90 * Math.max(0, look.brown - 0.22);
+  s -= Math.min(25, 60 * Math.max(0, look.brown - 0.3));
   s -= 70 * Math.max(0, look.white - 0.18);
   const h = hash(name.trim() || '無題');
   s += ((h % 1000) / 1000 - 0.5) * 16;
@@ -147,6 +153,8 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   if (hasCharm && rank >= 3 && (h >>> 4) % 3 === 0) line = CHARM_LINE;
   // 低いときは、理由がわかる一言
   if (rank <= 2 && fail) line = FAIL_LINES[fail];
+  // 茶色っぽさで点が伸びなかったときは、直し方がわかる一言
+  else if (rank <= 3 && look.brown > 0.3) line = BROWN_LINE;
   if (rank <= 1) {
     if (empty) line = EMPTY_LINE;
     else if (fail) line = FAIL_LINES[fail];
