@@ -209,7 +209,8 @@ async function buildTray() {
     }
     if (!pick.ghost) {
       // 上へ動いたら持ち上げる。横へ動いたら棚を送る
-      if (pick.it && -dy >= 8 && -dy >= Math.abs(dx) * 0.5) {
+      const wide = body.classList.contains('wide');
+      if (pick.it && (wide ? Math.hypot(dx, dy) >= 6 : -dy >= 8 && -dy >= Math.abs(dx) * 0.5)) {
         sound.unlock();
         sound.slide();
         const g = document.createElement('img');
@@ -229,7 +230,7 @@ async function buildTray() {
       } else return;
     }
     const it = pick.it!;
-    const gy = e.clientY - LIFT;
+    const gy = e.clientY - (e.pointerType === 'mouse' ? 0 : LIFT);
     const over = Math.hypot(e.clientX - v.cx, gy - v.cy) < v.R * 0.98;
     // 筒の上では、実際に入る大きさまで縮む
     const sz = over ? ghostSize(it) : 64;
@@ -257,7 +258,7 @@ async function buildTray() {
     pick.el?.classList.remove('holding');
     if (!g || !pick.it) return;
     noClick = performance.now();
-    const gy = e.clientY - LIFT;
+    const gy = e.clientY - (e.pointerType === 'mouse' ? 0 : LIFT);
     const over = Math.hypot(e.clientX - v.cx, gy - v.cy) < v.R * 0.95;
     if (over && e.type === 'pointerup') {
       addItem(pick.it, clampIn(...toCell(e.clientX, gy), pick.it.size[1]));
@@ -598,6 +599,22 @@ function layout() {
     goal.cy = h / 2;
     return;
   }
+  if (body.classList.contains('wide')) {
+    const pad = 56;
+    const col = Math.round(Math.min(600, Math.max(440, w * 0.36)));
+    const areaW = w - col - pad * 3;
+    const availH = h - top - 32;
+    const cap = stage === 'intro' || stage === 'look' || stage === 'name' || stage === 'appraise' ? 520 : 380;
+    const shrink = stage === 'fill1' || stage === 'fill2' ? 40 : 0;
+    // 入口は筒のまわりの暗い影まで画面に収める
+    goal.R = Math.max(120, Math.min(areaW / 2, availH / 2, cap) * (stage === 'intro' ? 0.86 : 1) - shrink);
+    goal.cx = pad + areaW / 2;
+    goal.cy = top + availH / 2;
+    document.documentElement.style.setProperty('--col', `${col}px`);
+    document.documentElement.style.setProperty('--stage-x', `${goal.cx}px`);
+    return;
+  }
+  document.documentElement.style.removeProperty('--stage-x');
   if (stage === 'intro') {
     goal.R = Math.min((w / 2) * 1.16, h * 0.34, 460);
     goal.cx = w / 2;
@@ -1260,7 +1277,10 @@ $('#snd').addEventListener('click', () => {
 });
 
 // ---------- ループ ----------
+// 横長の大きい画面（パソコン）：左に筒、右の列に棚とボタン。横幅いっぱいを使う
+const isWide = () => innerWidth >= 960 && innerWidth > innerHeight * 1.2;
 function resize() {
+  body.classList.toggle('wide', isWide());
   R.resize(innerWidth, innerHeight, Math.min(2, window.devicePixelRatio || 1));
   layout();
   Object.assign(v, { R: goal.R, cx: goal.cx, cy: goal.cy });
