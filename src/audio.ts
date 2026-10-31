@@ -19,16 +19,33 @@ export class Sound {
   private pourNodes: { stop: () => void; set: (x: number) => void } | null = null;
   private hiss: { g: GainNode; f: BiquadFilterNode } | null = null;
   private lastHit = 0;
+  private lastSound = 0;
+
+  // 何も鳴っていないあいだは音の出口を止める。
+  // 出口が開いたままだと、無音でもスマホのスピーカーやイヤホンが小さく「サー」と鳴るため。
+  // 鳴らすときに wake() で開け直す
+  private wake() {
+    this.lastSound = performance.now();
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+  }
+  private sleepIfIdle() {
+    const c = this.ctx;
+    if (!c || c.state !== 'running') return;
+    if (this.grind.src || this.pourNodes) return;
+    if (performance.now() - this.lastSound > 3500) c.suspend().catch(() => {});
+  }
 
   unlock() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
+      this.wake();
       return;
     }
     const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AC) return;
     const ctx = new AC({ latencyHint: 'interactive' });
     this.ctx = ctx;
+    this.lastSound = performance.now();
+    setInterval(() => this.sleepIfIdle(), 1000);
     this.master = ctx.createGain();
     this.master.gain.value = this.enabled ? 0.9 : 0;
     this.muffle = ctx.createBiquadFilter();
@@ -88,6 +105,7 @@ export class Sound {
   }
 
   private out(pan: number, wet = 1) {
+    this.wake();
     const ctx = this.ctx!;
     const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     const g = ctx.createGain();
@@ -259,6 +277,7 @@ export class Sound {
     // 液の中でラメはいつも少し漂っている。その分（約0.06）は鳴らさず、回したときだけ「さらさら」
     const k = Math.max(0, amount - 0.09) / 0.12;
     const a = this.enabled ? Math.min(0.012, k * 0.012) : 0;
+    if (a > 0.0005) this.wake();
     this.hiss.g.gain.setTargetAtTime(a, ctx.currentTime, 0.12);
   }
 
@@ -286,6 +305,7 @@ export class Sound {
   grindMove(speed: number, progress: number, x: number) {
     if (!this.ctx || !this.enabled) return;
     const ctx = this.ctx;
+    this.wake();
     const now = ctx.currentTime;
     const dt = Math.min(0.1, now - this.grind.last);
     this.grind.last = now;
