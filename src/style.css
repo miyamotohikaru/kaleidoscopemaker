@@ -93,8 +93,6 @@ body[data-stage='intro'] .steps { visibility: hidden; }
   padding-top: 120px;
   transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
 }
-.kicker { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--brass); letter-spacing: 0.3em; }
-.kicker i { width: 1px; height: 10px; background: var(--line); }
 .intro h1 {
   margin: 14px 0 12px; font-weight: 200; font-size: clamp(40px, 11.6vw, 84px); line-height: 1; letter-spacing: 0.06em;
   color: var(--ink);
