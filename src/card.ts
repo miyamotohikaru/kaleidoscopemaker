@@ -263,7 +263,10 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   x.fillText('所見', 126, 1116);
   const kw = 112;
   const kh = (kuma.naturalHeight / Math.max(1, kuma.naturalWidth)) * kw || 140;
+  x.save();
+  x.filter = 'brightness(1.08)';
   x.drawImage(kuma, 84, 1132, kw, kh);
+  x.restore();
   x.fillStyle = T.ink;
   x.font = `400 30px ${SANS}`;
   const lines = v.line.split('\n');

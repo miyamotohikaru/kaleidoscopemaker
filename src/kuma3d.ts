@@ -30,19 +30,20 @@ export class Kuma3D {
     this.r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     this.r.outputColorSpace = THREE.SRGBColorSpace;
     this.r.toneMapping = THREE.ACESFilmicToneMapping;
-    this.r.toneMappingExposure = 1.05;
+    this.r.toneMappingExposure = 1.22; // 白い紙の上で沈まないように明るめ
     this.cam.position.set(0, 1.05, 6.2);
     this.cam.lookAt(0, 0.95, 0);
-    const key = new THREE.DirectionalLight(0xfff1dc, 2.6);
+    const key = new THREE.DirectionalLight(0xfff6ea, 3.0);
     key.position.set(-2, 3, 4);
     const rim = new THREE.DirectionalLight(0xffc98a, 2.2);
     rim.position.set(3, 2, -3);
-    const fill = new THREE.HemisphereLight(0xfff4e6, 0x1a1210, 1.1);
+    // 下からの照り返し：白い紙なので明るい
+    const fill = new THREE.HemisphereLight(0xffffff, 0xd8d6d0, 1.6);
     this.scene.add(key, rim, fill, this.root);
     const pm = new THREE.PMREMGenerator(this.r);
     this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
     // 金属（筒）だけに映り込みが欲しいので、体への効きは弱く
-    this.scene.environmentIntensity = 0.25;
+    this.scene.environmentIntensity = 0.4;
     pm.dispose();
     // 真鍮の小さな万華鏡（筒の +Y が対物側＝光のほう）
     const brass = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, metalness: 1, roughness: 0.25, envMapIntensity: 5 }); // ステンレス
