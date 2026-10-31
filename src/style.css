@@ -170,6 +170,8 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
   box-shadow: inset 0 14px 18px -10px rgba(0, 0, 0, 0.8);
 }
 .tray::-webkit-scrollbar { display: none; }
+/* 背の低い画面では棚を少し詰めて、筒に場所をゆずる */
+@media (max-height: 620px) { .tray { --row: 86px; --plank: 20px; } .slot img { width: 48px; height: 48px; } }
 .tray.free { scroll-snap-type: none; }
 .slot {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
@@ -369,55 +371,13 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
   .tray { margin: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
 
-/* パソコン（横長）：左に筒、右の列に棚・液・名前とボタン。横幅いっぱいを使う */
-body.wide .say { left: var(--stage-x, 50%); }
-body.wide .panel, body.wide .dock { left: auto; right: 56px; width: var(--col); margin-left: 0; padding: 0; }
-body.wide .dock { bottom: 40px; }
-body.wide .panel { bottom: 120px; }
-body.wide .intro {
-  left: auto; right: 56px; top: 0; bottom: 0; width: var(--col); margin: 0; padding: 0;
-  display: flex; flex-direction: column; justify-content: center; background: none;
-}
-body.wide .intro h1 { font-size: min(76px, calc(var(--col) / 7.8)); }
-body.wide .tray {
-  grid-auto-flow: row; grid-template-columns: repeat(7, 1fr); grid-template-rows: none; grid-auto-rows: var(--row);
-  overflow: visible; margin: 0; padding: 0 8px;
-  border-left: 1px solid rgba(196, 161, 95, 0.2); border-right: 1px solid rgba(196, 161, 95, 0.2);
-}
-body.wide .liquid { height: 120px; }
-/* 鑑定：左にこすくまくん、真ん中に鑑定書、右にボタン */
-body.wide .appraisal {
-  display: grid; align-items: center; justify-content: center; column-gap: 40px; padding: 40px;
-  grid-template-columns: 260px auto 340px;
-  grid-template-rows: 1fr auto auto 1fr;
-  grid-template-areas: 'kuma cert .' 'kuma cert kept' 'kuma cert actions' 'kuma cert .';
-}
-body.wide .kuma-stage { grid-area: kuma; height: min(62vh, 520px); max-width: none; }
-body.wide #kuma { width: 100%; height: 72%; }
-body.wide .kuma-say { position: static; width: auto; margin-top: 8px; }
-body.wide .cert { grid-area: cert; flex: none; height: min(calc(100vh - 80px), calc((100vw - 800px) * 1.25)); width: auto; aspect-ratio: 4 / 5; max-width: none; }
-body.wide .kept { grid-area: kept; text-align: left; }
-body.wide .actions { grid-area: actions; max-width: none; }
+/* パソコン（横長）：並びはスマホと同じ。棚だけ横いっぱいに広げて、送らずに全部見せる */
+body.wide .intro h1 { font-size: 68px; white-space: nowrap; }
+body.wide #p-fill1 { left: 56px; right: 56px; width: auto; margin-left: 0; }
+body.wide #p-fill1 .row { max-width: 640px; margin: 0 auto 6px; }
+body.wide .tray { grid-auto-columns: minmax(72px, 1fr); margin: 0; padding: 0 12px; border-left: 1px solid rgba(196, 161, 95, 0.2); border-right: 1px solid rgba(196, 161, 95, 0.2); }
 body.wide .arch-grid { grid-auto-columns: calc(min(58vh, 560px) * 0.8); padding: 8px 56px; scroll-padding: 0 56px; }
 body.wide #mortar-add { max-width: 520px; }
-/* 少し狭い横長：こすくまくんを右の列の上に */
-@media (max-width: 1199px) {
-  body.wide .appraisal {
-    grid-template-columns: auto 320px; grid-template-rows: 1fr auto auto auto 1fr;
-    grid-template-areas: 'cert .' 'cert kuma' 'cert kept' 'cert actions' 'cert .';
-  }
-  body.wide .kuma-stage { height: 220px; }
-  body.wide .cert { height: min(calc(100vh - 80px), calc((100vw - 440px) * 1.25)); }
-}
-/* 鑑定書の詳細：左に鑑定書、右にボタン */
-body.wide .arch-detail {
-  display: grid; column-gap: 56px; padding: 24px 56px 40px; justify-content: center;
-  grid-template-columns: auto minmax(300px, 380px); grid-template-rows: auto 1fr;
-  grid-template-areas: 'head head' 'card actions';
-}
-body.wide .arch-detail .sheet-head { grid-area: head; }
-body.wide .detail-card { grid-area: card; flex: none; height: calc(100vh - 140px); width: calc((100vh - 140px) * 0.8); max-width: none; margin: 0; }
-body.wide .detail-actions { grid-area: actions; align-self: center; max-width: none; padding: 0; }
 
 /* 共有用サムネを撮るときだけ（開発用） */
 body.og .top, body.og .dock, body.og .panel, body.og .say { display: none !important; }

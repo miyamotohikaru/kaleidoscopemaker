@@ -599,22 +599,6 @@ function layout() {
     goal.cy = h / 2;
     return;
   }
-  if (body.classList.contains('wide')) {
-    const pad = 56;
-    const col = Math.round(Math.min(600, Math.max(440, w * 0.36)));
-    const areaW = w - col - pad * 3;
-    const availH = h - top - 32;
-    const cap = stage === 'intro' || stage === 'look' || stage === 'name' || stage === 'appraise' ? 520 : 380;
-    const shrink = stage === 'fill1' || stage === 'fill2' ? 40 : 0;
-    // 入口は筒のまわりの暗い影まで画面に収める
-    goal.R = Math.max(120, Math.min(areaW / 2, availH / 2, cap) * (stage === 'intro' ? 0.86 : 1) - shrink);
-    goal.cx = pad + areaW / 2;
-    goal.cy = top + availH / 2;
-    document.documentElement.style.setProperty('--col', `${col}px`);
-    document.documentElement.style.setProperty('--stage-x', `${goal.cx}px`);
-    return;
-  }
-  document.documentElement.style.removeProperty('--stage-x');
   if (stage === 'intro') {
     goal.R = Math.min((w / 2) * 1.16, h * 0.34, 460);
     goal.cx = w / 2;
@@ -624,10 +608,11 @@ function layout() {
   const panel = document.querySelector<HTMLElement>(`#p-${stage === 'appraise' ? 'name' : stage}`);
   const bottom = panel ? panel.getBoundingClientRect().top : h - 120;
   if (stage === 'fill1' || stage === 'fill2') {
-    const avail = bottom - top - 44;
-    goal.R = Math.max(80, Math.min(w / 2 - 34, avail / 2 - 22, 300));
+    // 作っている筒は、棚とボタンの上の空きをほぼ使い切る大きさに
+    const avail = bottom - top - 12;
+    goal.R = Math.max(80, Math.min(w / 2 - 14, avail / 2 - 6, 320));
     goal.cx = w / 2;
-    goal.cy = top + 40 + avail / 2;
+    goal.cy = top + 6 + avail / 2;
   } else {
     const avail = bottom - top - 10;
     // できあがった万華鏡は、円の端まで全部見えるように（左右に少し余白）
@@ -1277,7 +1262,7 @@ $('#snd').addEventListener('click', () => {
 });
 
 // ---------- ループ ----------
-// 横長の大きい画面（パソコン）：左に筒、右の列に棚とボタン。横幅いっぱいを使う
+// 横長の大きい画面（パソコン）：並びはスマホと同じで、棚だけ横いっぱいに広げる
 const isWide = () => innerWidth >= 960 && innerWidth > innerHeight * 1.2;
 function resize() {
   body.classList.toggle('wide', isWide());
