@@ -1351,7 +1351,7 @@ function frame(now: number) {
         cnt++;
       }
     sound.flow(cnt ? Math.min(1, (sm / cnt) * 6) * Math.min(1, cnt / 80) : 0);
-  }
+  } else sound.flow(0);
   // 鏡の向きは重力の向き（下）に固定。置いた場所がそのまま模様の場所になる
   {
     let dw = -Math.PI / 2 - v.wedge;

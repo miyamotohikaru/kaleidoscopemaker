@@ -256,7 +256,9 @@ export class Sound {
       s.start();
       this.hiss = { g, f };
     }
-    const a = this.enabled ? Math.min(0.05, amount * 0.05) : 0;
+    // 液の中でラメはいつも少し漂っている。その分（約0.06）は鳴らさず、回したときだけ「さらさら」
+    const k = Math.max(0, amount - 0.09) / 0.12;
+    const a = this.enabled ? Math.min(0.012, k * 0.012) : 0;
     this.hiss.g.gain.setTargetAtTime(a, ctx.currentTime, 0.12);
   }
 
