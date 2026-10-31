@@ -10,6 +10,23 @@ const LIQ: Record<string, { col: [number, number, number]; a: number; r: number 
   honey: { col: [1.0, 0.55, 0.12], a: 0.62, r: 0.045 },
 };
 
+// 紙の色（sRGB）を、トーンマップ（ACES）とガンマを通したあとで同じ色になる明るさに戻す。
+// 床を「紙」と同じ色・同じ方眼で描くため（2D の窓から 3D に切り替わっても継ぎ目が出ない）
+const PAPER = /* glsl */ `
+uniform float uGridPx;
+float invAces(float y){
+  y = clamp(y, 0., .985);
+  float a = 2.51 - 2.43*y, b = .03 - .59*y, c = -.14*y;
+  return (-b + sqrt(b*b - 4.*a*c)) / (2.*a);
+}
+vec3 paperLin(float shade){
+  vec2 g = abs(fract(gl_FragCoord.xy / uGridPx + .5) - .5) * uGridPx;
+  float line = 1. - smoothstep(.0, 1., min(g.x, g.y));
+  vec3 srgb = vec3(.949, .945, .929) * shade * (1. - line * .045);
+  vec3 y = pow(srgb, vec3(2.2));
+  return vec3(invAces(y.r), invAces(y.g), invAces(y.b));
+}`;
+
 const glassVert = /* glsl */ `
 varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec2 vUv;
 void main(){
@@ -53,26 +70,26 @@ export class Pour3D {
   bottleIn = 0;
   bx = 0;
   mats: Record<string, THREE.ShaderMaterial> = {};
+  gridU = { value: 32 };
 
   constructor(gl: THREE.WebGLRenderer, chamber: THREE.Texture) {
     const pm = new THREE.PMREMGenerator(gl);
     this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
     pm.dispose();
 
-    // 床：ベルベット
+    // 床：紙。色は最後の段で紙に置き換える（しるし g = -(1+影)）。筒のまわりにだけ柔らかい影
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(30, 30),
       new THREE.ShaderMaterial({
         vertexShader: glassVert,
+        uniforms: { uGridPx: this.gridU },
         fragmentShader: /* glsl */ `
         varying vec3 vP;
-        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+        ${PAPER}
         void main(){
-          float r = length(vP.xz);
-          float fib = h(floor(vP.xz*220.)) * .5 + .5;
-          vec3 c = vec3(.016,.012,.016) * (.7 + .5*fib);
-          c *= .45 + .55*smoothstep(1.02, 1.9, r);
-          gl_FragColor = vec4(c, 1.);
+          float r = length(vP.xz - vec2(0., -.06));
+          float sh = 1. - .22*exp(-max(r - 1.075, 0.) * 9.) - .08*exp(-max(r - 1.075, 0.) * 2.);
+          gl_FragColor = vec4(paperLin(sh), 1.);
         }`,
       }),
     );
@@ -93,7 +110,7 @@ export class Pour3D {
     this.scene.add(this.disc);
 
     // 真鍮の筒
-    const brass = new THREE.MeshStandardMaterial({ color: 0xa8803f, metalness: 1, roughness: 0.2, side: THREE.DoubleSide });
+    const brass = new THREE.MeshStandardMaterial({ color: 0xc4c8cc, metalness: 1, roughness: 0.28, side: THREE.DoubleSide }); // ステンレス
     const outer = new THREE.Mesh(new THREE.CylinderGeometry(1.075, 1.075, H, 160, 1, true), brass);
     outer.position.y = H / 2;
     const inner = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, H, 160, 1, true), brass);
@@ -172,7 +189,8 @@ export class Pour3D {
       void main(){
         float f = pow(1.-abs(dot(vN,vV)), 2.5);
         float streak = smoothstep(.92, 1., abs(dot(vN, normalize(vec3(-.6,.2,.8)))));
-        gl_FragColor = vec4(vec3(.85,.92,1.)*(f*.9 + streak*.8), .06 + f*.5 + streak*.4);
+        // 白い紙の上のガラス：縁は灰色に沈み、映り込みの筋だけ白く光る
+        gl_FragColor = vec4(mix(vec3(.05,.06,.07), vec3(1.8), streak), .05 + f*.5 + streak*.45);
       }`,
       transparent: true,
       depthWrite: false,
@@ -248,11 +266,12 @@ export class Pour3D {
     this.wall = new THREE.Mesh(new THREE.CylinderGeometry(1.082, 1.082, H, 160, 1, true), this.mats.wall);
     this.wall.position.y = H / 2;
     this.mats.puddle = new THREE.ShaderMaterial({
-      uniforms: { uCol: { value: new THREE.Vector3() }, uA: { value: 0 }, uR: { value: 1 }, uTime: { value: 0 } },
+      uniforms: { uCol: { value: new THREE.Vector3() }, uA: { value: 0 }, uR: { value: 1 }, uTime: { value: 0 }, uGridPx: this.gridU },
       vertexShader: glassVert,
       fragmentShader: /* glsl */ `
       uniform vec3 uCol; uniform float uA; uniform float uR; uniform float uTime;
       varying vec3 vP; varying vec3 vV;
+      ${PAPER}
       float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
       float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
         return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
@@ -265,9 +284,11 @@ export class Pour3D {
         vec3 R = reflect(-vV, vec3(0.,1.,0.));
         float win = smoothstep(.96, .995, R.y) * smoothstep(.5, .2, abs(R.x));
         float rim = smoothstep(edge - .06, edge - .01, length(p)) * in1;
-        gl_FragColor = vec4(uCol*.1 + vec3(1.,.95,.88)*(win*.8 + rim*.45), in1 * (uA*.35 + .07 + win*.4 + rim*.35));
+        if(in1 < .5) discard;
+        // 濡れた紙：少し暗く、縁と映り込みだけ明るい（紙のしるしで描く）
+        float sh = .84 + win*.12 + rim*.08 - uA*.08;
+        gl_FragColor = vec4(paperLin(sh) * mix(vec3(1.), uCol, .25), 1.);
       }`,
-      transparent: true,
       depthWrite: false,
     });
     this.puddle = new THREE.Mesh(new THREE.CircleGeometry(2.4, 96), this.mats.puddle);
@@ -279,6 +300,7 @@ export class Pour3D {
 
   update(dt: number, s: PourState) {
     const cam = this.cam;
+    this.gridU.value = 32 * Math.min(2, window.devicePixelRatio || 1);
     // 真上から見たとき、半径1が s.R ピクセルになる距離
     const fov = (cam.fov * Math.PI) / 180;
     const D = s.Hh / (2 * s.R * Math.tan(fov / 2));

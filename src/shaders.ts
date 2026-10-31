@@ -326,6 +326,15 @@ vec3 chamber(vec2 c){
   return texture2D(uChamber, uv).rgb;
 }
 
+// 筒の外は「紙」。値ではなくしるしを書いておき、最後の段（finalFrag）で紙の色に置き換える。
+// g < -.5 が紙。影の濃さ（1 = 影なし）を -(1+影) として g に入れる
+vec3 paperMark(float shade){ return vec3(0., -(1. + shade), 0.); }
+float dishShadow(vec2 frag, float rim, float soft){
+  // 皿の下に落ちる柔らかい影（少し下にずらす）
+  float rr = length((frag - uCenter - vec2(0., -.06*uR)) / uR);
+  return 1. - .2*exp(-max(rr - rim, 0.) * uR / soft) - .08*exp(-max(rr - rim, 0.) * uR / (soft*5.));
+}
+
 vec3 velvet(vec2 frag){
   vec2 p = (frag - uCenter)/max(uRes.x, uRes.y);
   float fib = vnoise(frag*vec2(.9, .35)) * .5 + vnoise(frag*.12)*.5;
@@ -342,11 +351,8 @@ void main(){
   float px = 1./uR;
 
   if(uMode < .5){
-    // 窓：真鍮の枠に入った筒の口を、まっすぐ見る
-    vec3 bg = velvet(frag);
-    // 枠の影
-    bg *= 1. - .6*uRing*exp(-max(r-1.1, 0.)*6.) * step(1., r);
-    col = bg;
+    // 窓：ステンレスの縁に入った筒の口を、まっすぐ見る。外は紙
+    col = paperMark(mix(1., dishShadow(frag, 1.075, 10.), uRing));
     if(r < 1.){
       vec2 c = rot(-uAngle) * p;
       vec3 ch = chamber(c);
@@ -367,21 +373,22 @@ void main(){
         col += vec3(.95,.75,.4) * line * uGuide * (inW > .5 || th > 6.2831853 - al*.02 ? 1.2 : .5);
       }
     }
-    // 真鍮のリング
+    // ステンレスの縁（シャーレの台のような、つや消しの銀）
     float w = .075;
     if(r >= 1. && r < 1.+w && uRing > .001){
       float t = (r-1.)/w;
       float th = atan(p.y, p.x);
-      vec3 brass = vec3(.62, .45, .2);
-      float band = .45 + .55*pow(max(cos(th - 2.2), 0.), 3.) + .25*pow(max(cos(th + 1.), 0.), 6.);
+      vec3 steel = vec3(.62, .64, .66);
+      float band = .55 + .45*pow(max(cos(th - 2.2), 0.), 3.) + .2*pow(max(cos(th + 1.), 0.), 6.);
       float bevel = 1. - pow(abs(t*2.-1.), 2.);
-      float brush = .9 + .1*vnoise(vec2(th*300., t*3.));
-      vec3 rc = brass * (.12 + .9*band*bevel) * brush;
-      float ticks = step(.96, cos(th*36.)) * smoothstep(.75, .55, t) * step(.2, t);
-      rc += brass * ticks * .5;
-      rc += vec3(1.,.85,.6) * exp(-pow((t-.25)*12., 2.)) * band * .35;
+      float brush = .92 + .08*vnoise(vec2(th*300., t*3.));
+      vec3 rc = steel * (.35 + .75*band*bevel) * brush;
+      float ticks = step(.97, cos(th*36.)) * smoothstep(.75, .55, t) * step(.2, t);
+      rc *= 1. - ticks * .35;
+      rc += vec3(1.) * exp(-pow((t-.3)*12., 2.)) * band * .35;
       float edge = smoothstep(0., px*1.5/w, t) * smoothstep(1., 1.-px*1.5/w, t);
-      col = mix(col, rc, edge * uRing);
+      if(edge * uRing > .5) col = rc;
+      else if(edge * uRing > .001) col = mix(rc * .4, rc, edge * uRing);
     }
   } else {
     // 万華鏡：鏡2枚の継ぎ目で折り返す
@@ -435,7 +442,10 @@ void main(){
     // 筒の内側の暗さ
     col *= 1. - smoothstep(.82, 1.02, r) * .65;
     col += velvet(frag) * .4 * (1.-m);
+    // 筒の外は紙。のぞき穴の黒い円が、紙の上に置かれている
+    if(r > 1.) { gl_FragColor = vec4(paperMark(dishShadow(frag, 1., 14.)), 1.); return; }
   }
+  if(col.g < -.5) { gl_FragColor = vec4(col, 1.); return; }
   gl_FragColor = vec4(col * uFade, 1.);
 }
 `;
@@ -453,16 +463,18 @@ uniform float uTrail;
 varying vec2 vUv;
 void main(){
   vec2 frag = vUv*uRes;
+  vec3 c0 = texture2D(uScene, vUv).rgb;
+  if(c0.g < -.5) { gl_FragColor = vec4(c0, 1.); return; }
   vec2 d = frag - uCenter;
   float r = length(d)/uR;
   float e = smoothstep(.5, 1., r) * uEdge;
   vec2 dir = d / max(length(d), 1.);
   vec2 off = dir * e * e * 3.5 / uRes;
   vec3 c;
-  c.r = texture2D(uScene, vUv + off).r;
-  c.g = texture2D(uScene, vUv).g;
-  c.b = texture2D(uScene, vUv - off).b;
-  vec3 h = texture2D(uHist, vUv).rgb;
+  c.r = max(texture2D(uScene, vUv + off).r, 0.);
+  c.g = c0.g;
+  c.b = max(texture2D(uScene, vUv - off).b, 0.);
+  vec3 h = max(texture2D(uHist, vUv).rgb, 0.);
   c = mix(c, max(c, h*.93), clamp(e*uTrail, 0., .92));
   gl_FragColor = vec4(c, 1.);
 }
@@ -509,11 +521,26 @@ uniform sampler2D uBloomB;
 uniform float uBloom;
 uniform float uTime;
 uniform float uExposure;
+uniform vec3 uPaper;      // 紙の色（sRGB）
+uniform vec2 uRes;
+uniform float uGrid;      // 方眼の1マス（画素）
 varying vec2 vUv;
 ${NOISE}
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14), 0., 1.); }
 void main(){
   vec3 c = texture2D(uScene, vUv).rgb;
+  if(c.g < -.5){
+    // 紙：薄い方眼と、皿の影
+    float shade = clamp(-c.g - 1., 0., 1.);
+    vec2 f = vUv * uRes;
+    vec2 g = abs(fract(f / uGrid + .5) - .5) * uGrid;
+    float line = 1. - smoothstep(.0, 1., min(g.x, g.y));
+    vec3 pc = uPaper * shade * (1. - line * .045);
+    pc += (hash21(vUv*1000.) - .5) * .01;
+    gl_FragColor = vec4(pc, 1.);
+    return;
+  }
+  c = max(c, 0.);
   vec3 b = texture2D(uBloomA, vUv).rgb * .7 + texture2D(uBloomB, vUv).rgb * 1.1;
   c += b * uBloom;
   c = aces(c * uExposure);

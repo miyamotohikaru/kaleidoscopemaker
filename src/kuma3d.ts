@@ -45,7 +45,7 @@ export class Kuma3D {
     this.scene.environmentIntensity = 0.25;
     pm.dispose();
     // 真鍮の小さな万華鏡（筒の +Y が対物側＝光のほう）
-    const brass = new THREE.MeshStandardMaterial({ color: 0xd0a058, metalness: 1, roughness: 0.22, envMapIntensity: 5 });
+    const brass = new THREE.MeshStandardMaterial({ color: 0xc8ccd0, metalness: 1, roughness: 0.25, envMapIntensity: 5 }); // ステンレス
     const dark = new THREE.MeshStandardMaterial({ color: 0x1a1412, metalness: 0.3, roughness: 0.6 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.07, 0.78, 48), brass);
     body.position.y = 0.39;

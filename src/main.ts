@@ -173,12 +173,19 @@ async function buildTray() {
       frame = b.r * 1.25;
     }
     const src = R.tile(bodies, frame);
-    html.push(`<button class="slot" type="button" data-id="${it.id}" aria-label="${it.label}"><img src="${src}" alt=""/><span>${shortLabel(it.label)}</span></button>`);
+    html.push(`<button class="slot" type="button" data-id="${it.id}" aria-label="${it.label}"><img src="${src}" alt=""/><span><i>${String(html.length + 1).padStart(2, '0')}</i>${shortLabel(it.label)}</span></button>`);
   }
-  html.push(`<button class="slot drawer" type="button" data-drawer="mortar" aria-label="乳鉢で砕く"><i class="knob"></i>${DRAWER_MORTAR}<span>乳鉢</span></button>`);
-  html.push(`<button class="slot drawer" type="button" data-drawer="photo" aria-label="写真を破片にする"><i class="knob"></i>${DRAWER_PHOTO}<span>写真</span></button>`);
+  html.push(`<button class="slot drawer" type="button" data-drawer="mortar" aria-label="乳鉢で砕く"><i class="knob"></i>${DRAWER_MORTAR}<span><i>${String(html.length + 1).padStart(2, '0')}</i>乳鉢</span></button>`);
+  html.push(`<button class="slot drawer" type="button" data-drawer="photo" aria-label="写真を破片にする"><i class="knob"></i>${DRAWER_PHOTO}<span><i>${String(html.length + 1).padStart(2, '0')}</i>写真</span></button>`);
   if (html.length % 2) html.push('<div class="slot filler" aria-hidden="true"></div>');
   tray.innerHTML = html.join('');
+  // 番号はカタログのように上の段の左から右、つづけて下の段（並びは2段の縦詰めなので数え直す）
+  const slots = [...tray.children];
+  const cols = Math.ceil(slots.length / 2);
+  slots.forEach((el, e) => {
+    const n = el.querySelector('span i');
+    if (n) n.textContent = String((e % 2) * cols + Math.floor(e / 2) + 1).padStart(2, '0');
+  });
   // つまんで上へすべらせ、筒の好きな場所で離す（指で隠れないよう、少し上に浮かせて運ぶ）
   const LIFT = 40;
   // 横スクロールもこちらで受け持つ（ブラウザに任せると、斜めに引いたときに「スクロール」と判定されて運べなくなる）
@@ -558,13 +565,13 @@ async function typeOut(el: HTMLElement, text: string, alive: () => boolean = () 
 // ---------- 段の切り替え ----------
 const ORDER: Stage[] = ['fill1', 'fill2', 'look', 'name'];
 const NEXT: Record<string, [string, string]> = {
-  fill1: ['ii', '満たす'],
-  fill2: ['iii', 'のぞく'],
-  look: ['iv', '名付ける'],
+  fill1: ['02', '満たす'],
+  fill2: ['03', 'のぞく'],
+  look: ['04', '名付ける'],
   name: ['', '鑑定してもらう'],
 };
 function setNext() {
-  const [n, l] = shared && stage === 'look' ? ['i', '自分もつくる'] : returnTo && stage === 'look' ? ['', '鑑定書に戻る'] : NEXT[stage] ?? ['', ''];
+  const [n, l] = shared && stage === 'look' ? ['01', '自分もつくる'] : returnTo && stage === 'look' ? ['', '鑑定書に戻る'] : NEXT[stage] ?? ['', ''];
   $('#next-num').textContent = n;
   $('#next-label').textContent = l;
   $<HTMLButtonElement>('#next').disabled = stage === 'fill2' && (!cell.liquid || cell.levelTarget < 0.05);
@@ -942,7 +949,11 @@ async function doAppraise() {
     const force = new URLSearchParams(location.search).get('rank');
     if (force) Object.assign(verdict, { rank: +force, rankName: RANKS[+force], pos: (+force + 0.5) / 7 });
   }
-  const cardP = drawCard(scope, name, verdict, DOMAIN);
+  const cardP = drawCard(scope, name, verdict, DOMAIN, {
+    mirrors,
+    liquid: cell.liquid?.label ?? 'なし',
+    count: cell.bodies.filter((b) => !b.small).length,
+  });
   await wait(500);
   kuma.setScope(scope);
   kuma.peek = 0;

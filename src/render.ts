@@ -162,6 +162,9 @@ export class Renderer {
       uBloom: { value: 1 },
       uTime: { value: 0 },
       uExposure: { value: 1 },
+      uPaper: { value: new THREE.Vector3(0.949, 0.945, 0.929) },
+      uRes: { value: new THREE.Vector2(1, 1) },
+      uGrid: { value: 32 },
     });
     this.mats.tile = mk(S.tileFrag, { uTex: { value: null } });
 
@@ -346,7 +349,8 @@ export class Renderer {
     this.gl.setRenderTarget(post.scene);
     this.gl.clear(true, true, false);
     this.gl.render(scene, cam);
-    this.postChain(v, post, null, this.dpr);
+    // 床が紙の白なので、光のにじみは掛けない（紙全体がにじんでしまう）
+    this.postChain({ ...v, bloom: 0, edge: 0 }, post, null, this.dpr);
   }
 
   private postChain(v: ViewState, post: Post, target: THREE.WebGLRenderTarget | null, scale: number) {
@@ -392,6 +396,8 @@ export class Renderer {
     F.uBloomB.value = post.c1.texture;
     F.uBloom.value = v.bloom;
     F.uTime.value = this.time;
+    (F.uRes.value as THREE.Vector2).set(W, H);
+    F.uGrid.value = 32 * scale;
     this.pass(this.mats.final, target);
   }
 
