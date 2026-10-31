@@ -142,6 +142,7 @@ export class Renderer {
       uStretch: { value: 1 },
       uGuide: { value: 0 },
       uSmudge: { value: 0 },
+      uSpill: { value: 0 },
     });
     this.mats.edge = mk(S.edgeFrag, {
       uScene: { value: null },
@@ -333,6 +334,7 @@ export class Renderer {
     V.uRing.value = v.ring;
     V.uGuide.value = v.guide;
     V.uSmudge.value = cell.smudge;
+    V.uSpill.value = Math.min(1, cell.spill * 2.5);
     V.uStretch.value = Math.min(1.9, 0.8 / (Math.PI / v.mirrors));
     this.pass(this.mats.view, post.scene);
     this.postChain(v, post, target, scale);

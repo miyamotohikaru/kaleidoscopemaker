@@ -366,6 +366,17 @@ export class Sound {
     setTimeout(stop, dur * 1000);
   }
 
+  // あふれた液が、筒の縁から床へ落ちる音
+  spill(liquid: string) {
+    if (!this.ctx || !this.enabled) return;
+    const t = this.ctx.currentTime + 0.01;
+    const thick = liquid === 'honey' ? 1 : liquid === 'oil' ? 0.5 : 0;
+    const o = this.out((Math.random() - 0.5) * 0.6, 0.4);
+    const f = 900 + Math.random() * 700 - thick * 450;
+    this.tone(t, f, 0.06 + thick * 0.08, 0.05, o, f * (1.6 - thick * 0.4));
+    this.noise(t, 0.05 + thick * 0.06, 1400 - thick * 600, 1.2, 0.05, o, 'bandpass', 0.002);
+  }
+
   pourStop() {
     this.pourNodes?.stop();
     this.pourNodes = null;

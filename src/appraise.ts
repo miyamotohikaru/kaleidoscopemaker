@@ -28,6 +28,7 @@ const FAIL_LINES: Record<string, string> = {
   smudge: '指のあと、ついてる。\n……ぼくのじゃないよ。',
   air: '泡、入ってる。\n……まあ、それも景色か。',
   packed: 'ぎゅうぎゅう。\n……動けないって。',
+  spill: 'あふれてる。\n……筒の外、べたべた。',
 };
 
 // 映った万華鏡の画像から測る
@@ -136,6 +137,7 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
     ['smudge', cell.smudge],
     ['air', air > 0.3 ? air : 0],
     ['packed', n >= 40 ? (n - 36) / 12 : 0],
+    ['spill', Math.min(1, cell.spill * 2.5)],
   ];
   for (const [, v] of fails) s -= 38 * v;
   const worst = fails.sort((a, b) => b[1] - a[1])[0];

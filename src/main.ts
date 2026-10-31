@@ -283,7 +283,7 @@ async function buildTray() {
     void el.offsetWidth;
     el.classList.add('nudge');
     sound.tick();
-    say('上にすべらせて、筒まで運んで。');
+    say('棚から筒まで持っていってね。');
   });
 }
 
@@ -479,7 +479,9 @@ function updateAmount() {
   f.style.width = `${(l * 100).toFixed(1)}%`;
   const c = cell.tint.map((x) => Math.round(255 * Math.pow(Math.min(1, x), 1 / 2.2)));
   f.style.background = `rgb(${c.join(',')})`;
+  f.parentElement!.classList.toggle('over', cell.spill > 0);
   if (l < 0.03) el.textContent = '筒の上を長押しすると、注げます';
+  else if (cell.spill > 0) el.textContent = 'あふれてる';
   else if (l >= 0.995) el.textContent = 'なみなみ';
   else el.textContent = `いま ${KANJI[Math.max(1, Math.min(9, Math.round(l * 10)))]}分目`;
 }
@@ -671,7 +673,7 @@ async function toWindow() {
   updateCount();
   await tween(600, (t) => (v.fade = t), easeO);
   body.classList.remove('busy');
-  say('棚から、上にすべらせて入れて。');
+  say('棚から筒まで持っていってね。');
 }
 
 async function toLook() {
@@ -723,6 +725,7 @@ function toCell(cx: number, cy: number): [number, number] {
   return [x * c - y * s, x * s + y * c];
 }
 const POUR_RATE: Record<string, number> = { water: 0.2, oil: 0.15, honey: 0.08 };
+let spillTick = 0;
 // 瓶の中の液の色（液そのものの色 × 選んだ色）
 function bottleColor(): [number, number, number] {
   const b = cell.liquid?.base ?? [1, 1, 1];
@@ -757,10 +760,6 @@ canvas.addEventListener('pointerdown', (e) => {
   if (stage === 'fill2') {
     if (!cell.liquid) {
       say('先に、瓶をえらんで。');
-      return;
-    }
-    if (cell.level >= 0.999) {
-      say('もう、いっぱい。');
       return;
     }
     Object.assign(pour, { on: true, id: e.pointerId, x: pourX(e.clientX) });
@@ -1320,10 +1319,17 @@ function frame(now: number) {
     cell.level = cell.levelTarget;
     cell.pourIn(bottleColor(), cell.levelTarget - before, L.id);
     cell.pokes.push({ x: pour.x, y: 0.05, vx: 0, vy: 0, r: 0.12 + (L.id === 'honey' ? 0.06 : 0), k: L.id === 'honey' ? 3 : 7 });
-    if (cell.levelTarget >= 1) {
-      stopPour();
-      say('いっぱい。');
-    }
+    // なみなみを超えても注ぎ続けると、あふれる
+    if (before >= 1) {
+      const was = cell.spill;
+      cell.spill = Math.min(2, cell.spill + POUR_RATE[L.id] * dt);
+      if (was === 0) say('あ、あふれた。');
+      spillTick -= dt;
+      if (spillTick <= 0) {
+        sound.spill(L.id);
+        spillTick = 0.18 + Math.random() * 0.14;
+      }
+    } else if (cell.levelTarget >= 1) say('なみなみ。');
     updateAmount();
   }
   // 物理（120Hz）
@@ -1378,6 +1384,7 @@ function frame(now: number) {
       cellCol: cell.vol > 0 ? cell.tint : bottleColor(),
       bottleCol: bottleColor(),
       pouring: pour.on,
+      spill: cell.spill,
       pourX: pour.on ? pour.x : 0.2,
       time: R.time,
       W: innerWidth,

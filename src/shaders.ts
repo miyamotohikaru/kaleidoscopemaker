@@ -317,6 +317,7 @@ uniform float uRing;      // 窓の真鍮リングの見え方 0..1
 uniform float uStretch;   // 扇の角度を何倍の範囲から拾うか
 uniform float uGuide;     // 鏡の線を見せる 0..1
 uniform float uSmudge;    // 指のあと 0..1
+uniform float uSpill;     // あふれた液がガラスに垂れた膜 0..1
 varying vec2 vUv;
 ${NOISE}
 
@@ -416,6 +417,15 @@ void main(){
       m = max(m, smoothstep(.3, .1, fr2) * (.55 + .45*(.5 + .5*sin(fr2*110.))));
       float lm = dot(col, vec3(.3,.59,.11));
       col = mix(col, vec3(lm)*.55 + vec3(.06,.058,.055), m * uSmudge * .8);
+    }
+    // 失敗：あふれた液がガラスを伝って垂れた膜。上から縦に流れた筋が、白っぽく虹色にくもる
+    if(uSpill > .001){
+      float drip = vnoise(vec2(p.x*7., p.y*1.3 + vnoise(p*3.)*.6));
+      float run = smoothstep(.35, .75, drip) * smoothstep(-.9, .5, p.y + vnoise(vec2(p.x*9., 1.))*.6);
+      float m = max(run, smoothstep(.55, 1., length(p)) * .7);
+      vec3 film = .5 + .5*cos(6.2831*(vnoise(p*4.)*1.5 + vec3(0., .33, .67)));
+      float lm = dot(col, vec3(.3,.59,.11));
+      col = mix(col, vec3(lm)*.7 + film*.06 + vec3(.05,.045,.04), m * uSpill * .75);
     }
     // 光の輪（絞りが開く）
     float ir = uIris;
