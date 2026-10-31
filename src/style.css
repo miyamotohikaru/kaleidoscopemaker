@@ -229,14 +229,23 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .liquid .vial::after { content: ''; position: absolute; top: 4px; left: 4px; width: 2px; height: 70%; background: rgba(255, 255, 255, 0.35); border-radius: 2px; }
 .liquid b { font-weight: 300; font-size: 14px; }
 .tints { display: flex; justify-content: center; gap: 4px; }
-/* 注いだ量の棒。目盛りは1分目ごと */
-.meter {
-  position: relative; height: 10px; margin: 14px 0 0; border: 1px solid var(--line); border-radius: 1px; overflow: hidden;
-  background: repeating-linear-gradient(to right, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
+/* 注いだ量の縦のメーター：筒の左に立てる。目盛りは1分目ごと、七分目だけ赤 */
+.vmeter {
+  position: fixed; z-index: 3; width: 12px; opacity: 0; pointer-events: none;
+  transition: opacity var(--t) var(--ease);
 }
-.meter.over { border-color: rgba(240, 150, 120, 0.8); animation: over 0.9s ease-in-out infinite; }
-@keyframes over { 50% { border-color: rgba(240, 150, 120, 0.25); } }
-.m-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; opacity: 0.85; transition: width 0.12s linear, background 0.4s var(--ease); }
+body[data-stage='fill2']:not(.busy) .vmeter { opacity: 1; }
+.vm-bar {
+  position: relative; width: 12px; height: 100%; border: 1px solid var(--ink); background: #fff;
+  background-image: repeating-linear-gradient(to top, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
+}
+.vm-bar .m-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; opacity: 0.9; transition: height 0.12s linear, background 0.4s var(--ease); }
+.vm-seven { position: absolute; left: -5px; right: -5px; bottom: 70%; height: 2px; background: var(--red); }
+.vm-top, .vm-seven-label { position: absolute; left: -2px; font-size: 11px; line-height: 1; white-space: nowrap; }
+.vm-top { top: -18px; color: var(--ink); }
+.vm-seven-label { left: 18px; color: var(--red); bottom: calc(70% - 5px); }
+.vmeter.over .vm-bar { border-color: var(--red); animation: over 0.9s ease-in-out infinite; }
+@keyframes over { 50% { border-color: rgba(178, 52, 42, 0.25); } }
 .amount { margin-top: 6px; text-align: center; font-size: 12px; color: var(--brass); letter-spacing: 0.2em; min-height: 1.7em; }
 .tint { width: 48px; height: 48px; display: grid; place-items: center; }
 .tint i { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(29, 29, 27, 0.25); transition: transform var(--t) var(--ease); }

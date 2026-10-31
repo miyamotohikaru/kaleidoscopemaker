@@ -86,7 +86,6 @@
     <section class="panel" id="p-fill2" aria-label="満たす">
       <div class="liquids" id="liquids"></div>
       <div class="tints" id="tints" role="radiogroup" aria-label="色"></div>
-      <div class="meter" aria-hidden="true"><span class="m-fill" id="m-fill"></span></div>
       <p class="amount" id="amount" aria-live="polite"></p>
     </section>
 
@@ -95,6 +94,13 @@
       <p class="hint">縁をなぞると、ゆっくり回ります</p>
       <button class="chip" id="tilt" type="button" aria-pressed="false">傾けて回す</button>
     </section>
+
+    <!-- 注いでいる筒の横の縦のメーター（満たすの段だけ） -->
+    <div class="vmeter" id="vmeter" aria-hidden="true">
+      <p class="vm-top">なみなみ</p>
+      <div class="vm-bar"><span class="m-fill" id="m-fill"></span><i class="vm-seven"></i></div>
+      <p class="vm-seven-label">七分目</p>
+    </div>
 
     <!-- 4 名付ける -->
     <section class="panel" id="p-name" aria-label="名付ける">

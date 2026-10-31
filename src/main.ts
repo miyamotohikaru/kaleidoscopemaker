@@ -484,10 +484,10 @@ function updateAmount() {
   const l = cell.liquid ? cell.levelTarget : 0;
   // 棒のメーター：注いだ量と、筒の中で混ざった液の色
   const f = $('#m-fill');
-  f.style.width = `${(l * 100).toFixed(1)}%`;
+  f.style.height = `${(l * 100).toFixed(1)}%`;
   const c = cell.tint.map((x) => Math.round(255 * Math.pow(Math.min(1, x), 1 / 2.2)));
   f.style.background = `rgb(${c.join(',')})`;
-  f.parentElement!.classList.toggle('over', cell.spill > 0);
+  $('#vmeter').classList.toggle('over', cell.spill > 0);
   if (l < 0.03) el.textContent = '筒の上を長押しすると、注げます';
   else if (cell.spill > 0) el.textContent = 'あふれてる';
   else if (l >= 0.995) el.textContent = 'なみなみ';
@@ -617,7 +617,8 @@ function layout() {
   if (stage === 'fill1' || stage === 'fill2') {
     // 作っている筒は、棚とボタンの上の空きをほぼ使い切る大きさに
     const avail = bottom - top - 12;
-    goal.R = Math.max(80, Math.min(w / 2 - 14, avail / 2 - 6, 320));
+    // 満たすでは、筒の左に縦のメーターを立てる場所を空ける
+    goal.R = Math.max(80, Math.min(w / 2 - (stage === 'fill2' ? 40 : 14), avail / 2 - 6, 320));
     goal.cx = w / 2;
     goal.cy = top + 6 + avail / 2;
   } else {
@@ -629,6 +630,14 @@ function layout() {
   }
 }
 
+// 縦のメーターを、斜めから見ている筒の左に立てる
+function placeMeter() {
+  const m = $('#vmeter');
+  const h = v.R * 0.95;
+  m.style.left = `${Math.max(12, v.cx - v.R * 0.9 - 30)}px`;
+  m.style.top = `${v.cy - h * 0.52}px`;
+  m.style.height = `${h}px`;
+}
 function placeEngrave() {
   const el = $('#engrave') as unknown as SVGSVGElement;
   const size = (2 * v.R * 1.0375 * 50) / 46;
@@ -1443,6 +1452,7 @@ function frame(now: number) {
     R.present3d(v, pour3d.scene, pour3d.cam);
   } else R.present(cell, v);
   if (v.mode === 0) placeEngrave();
+  if (stage === 'fill2') placeMeter();
   requestAnimationFrame(frame);
 }
 

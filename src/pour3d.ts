@@ -5,7 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 const H = 0.34; // 筒の深さ
 const LIQ: Record<string, { col: [number, number, number]; a: number; r: number }> = {
-  water: { col: [0.75, 0.88, 1.0], a: 0.16, r: 0.016 },
+  water: { col: [0.55, 0.78, 1.0], a: 0.3, r: 0.016 },
   oil: { col: [1.0, 0.82, 0.42], a: 0.3, r: 0.024 },
   honey: { col: [1.0, 0.55, 0.12], a: 0.62, r: 0.045 },
 };
@@ -63,6 +63,7 @@ export class Pour3D {
   bottle = new THREE.Group();
   bottleLiq: THREE.Mesh;
   stream: THREE.Mesh;
+  waterline: THREE.Mesh;
   wall: THREE.Mesh;
   puddle: THREE.Mesh;
   spillVis = 0;
@@ -158,16 +159,24 @@ export class Pour3D {
         float win = smoothstep(.96, .995, R.y) * smoothstep(.5, .2, abs(R.x));
         float th = sin(p.x*3.1 + uTime*.2) * .5 + sin(p.y*2.3 - uTime*.17) * .5;
         vec3 irid = .5 + .5*cos(6.2831*(th*.8 + vec3(0.,.33,.67)));
-        vec3 c = uCol*.12 + irid*.05 + vec3(1.,.95,.88)*(win*.9 + f*.35) + vec3(1.)*max(rip,0.)*.25;
+        // 液の色がはっきり分かるように、面そのものを少し色づける
+        vec3 c = uCol*.3 + irid*.05 + vec3(1.,.95,.88)*(win*.9 + f*.35) + vec3(1.)*max(rip,0.)*.25;
         float edge = smoothstep(.93, .998, length(p));
-        gl_FragColor = vec4(c + uCol*edge*.25, uA*.55 + win*.4 + f*.3 + edge*.15);
+        gl_FragColor = vec4(c + uCol*edge*.6, uA*.8 + win*.4 + f*.3 + edge*.45);
       }`,
       transparent: true,
       depthWrite: false,
     });
     this.liqTop = new THREE.Mesh(new THREE.CircleGeometry(0.998, 128), this.mats.liqTop);
     this.liqTop.rotation.x = -Math.PI / 2;
-    this.scene.add(this.liqSide, this.liqTop);
+    // 水面の線：筒の内側の壁に、液の高さを細い光る線で見せる（どこまで入ったか分かるように）
+    this.waterline = new THREE.Mesh(
+      new THREE.TorusGeometry(0.996, 0.007, 8, 180),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false }),
+    );
+    this.waterline.rotation.x = Math.PI / 2;
+    this.waterline.renderOrder = 4;
+    this.scene.add(this.liqSide, this.liqTop, this.waterline);
 
     // 瓶：首の口を原点にして傾ける
     const prof = [
@@ -325,6 +334,9 @@ export class Pour3D {
     this.liqSide.scale.set(1, h, 1);
     this.liqSide.position.y = h / 2;
     this.liqTop.position.y = h;
+    this.waterline.visible = !!show;
+    this.waterline.position.y = h + 0.002;
+    (this.waterline.material as THREE.MeshBasicMaterial).color.setRGB(0.75 + col.x * 0.25, 0.85 + col.y * 0.15, 1);
     for (const k of ['liqSide', 'liqTop', 'stream', 'bottleLiq']) {
       (this.mats[k].uniforms.uCol.value as THREE.Vector3).copy(k === 'stream' || k === 'bottleLiq' ? bcol : col);
       this.mats[k].uniforms.uA.value = L?.a ?? 0;
