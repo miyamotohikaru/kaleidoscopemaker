@@ -150,27 +150,55 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .seg button[aria-checked='true']::after { content: ''; position: absolute; left: 50%; bottom: 8px; width: 4px; height: 4px; margin-left: -2px; background: var(--brass); transform: rotate(45deg); }
 .link { height: 44px; padding: 0 4px; font-size: 12px; color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 5px; min-width: 64px; text-align: right; }
 
-/* 宝石の仕切り箱：2段の横スクロール */
+/* 宝石の棚：木の棚板が2段。品物は棚板の上に置かれ、棚板の前面に真鍮色の名札。横に送って奥まで見る */
 .tray {
-  display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 84px); grid-auto-columns: 74px;
-  gap: 1px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-left: 0;
-  background: var(--line); border: 1px solid var(--line); border-radius: 2px;
-  margin: 0 calc(var(--gut) * -1); border-left: 0; border-right: 0; touch-action: none;
-  scrollbar-width: none;
+  --row: 98px; --plank: 22px;
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, var(--row)); grid-auto-columns: 72px;
+  gap: 0; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scroll-padding-left: 0;
+  margin: 0 calc(var(--gut) * -1); padding: 0 6px; touch-action: none; scrollbar-width: none;
+  /* 棚の奥の壁（上から弱い明かり）＋ 段ごとの棚板 */
+  background:
+    linear-gradient(to bottom,
+      transparent calc(var(--row) - var(--plank) - 1px),
+      rgba(236, 205, 150, 0.32) calc(var(--row) - var(--plank) - 1px),
+      #4a3622 calc(var(--row) - var(--plank)),
+      #2c1f14 calc(var(--row) - var(--plank) + 4px),
+      #1d150e calc(var(--row) - 4px),
+      #0a0706 var(--row)) 0 0 / 100% var(--row) repeat-y local,
+    linear-gradient(to bottom, #0b0807 0, #221913 8px, #17110d 45%, #0e0a08 100%) 0 0 / 100% var(--row) repeat-y local;
+  border-top: 1px solid rgba(196, 161, 95, 0.28);
+  box-shadow: inset 0 14px 18px -10px rgba(0, 0, 0, 0.8);
 }
 .tray::-webkit-scrollbar { display: none; }
 .tray.free { scroll-snap-type: none; }
 .slot {
-  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background: radial-gradient(120% 90% at 50% 35%, #1a1416 0%, #0c0a0b 70%);
-  scroll-snap-align: start; overflow: hidden;
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  scroll-snap-align: start;
 }
-.slot img { width: 52px; height: 52px; pointer-events: none; transition: transform 0.2s var(--ease); }
-.slot span { font-size: 12px; line-height: 1.2; color: var(--ink-3); white-space: nowrap; }
-.slot:active img { transform: scale(0.9); }
-.slot.drawer { background: radial-gradient(120% 90% at 50% 35%, #1d1712 0%, #0e0b09 70%); }
-.slot.drawer svg { width: 34px; height: 34px; color: var(--brass); margin: 9px 0; }
-.slot .knob { position: absolute; top: 6px; left: 50%; width: 10px; height: 2px; margin-left: -5px; background: var(--brass); opacity: 0.6; border-radius: 2px; }
+/* 品物：棚板の上に立ち、板に小さな影を落とす */
+.slot img {
+  width: 54px; height: 54px; margin-bottom: calc(var(--plank) - 4px); pointer-events: none;
+  filter: drop-shadow(0 5px 3px rgba(0, 0, 0, 0.7));
+  transition: transform 0.2s var(--ease);
+}
+.slot::before {
+  content: ''; position: absolute; left: 14px; right: 14px; bottom: calc(var(--plank) - 3px); height: 6px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0)); pointer-events: none;
+}
+/* 名札：棚板の前面に彫った真鍮色の字 */
+.slot span {
+  position: absolute; left: 0; right: 0; bottom: 0; height: var(--plank); display: grid; place-items: center;
+  font-size: 12px; line-height: 1; color: rgba(236, 210, 154, 0.72); white-space: nowrap; letter-spacing: 0.06em;
+  text-shadow: 0 -1px 0 rgba(0, 0, 0, 0.6);
+}
+.slot:active img { transform: translateY(-3px) scale(0.94); }
+/* 引き出し（乳鉢・写真）：棚に置いた小さな木箱 */
+.slot.drawer svg {
+  width: 52px; height: 46px; padding: 9px; margin-bottom: calc(var(--plank) - 2px); color: var(--brass);
+  background: linear-gradient(180deg, #3a2a1c, #22180f); border: 1px solid rgba(196, 161, 95, 0.35); border-radius: 3px;
+  box-shadow: 0 4px 4px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(236, 205, 150, 0.15);
+}
+.slot .knob { position: absolute; bottom: calc(var(--plank) + 41px); left: 50%; width: 10px; height: 2px; margin-left: -5px; background: var(--brass); opacity: 0.8; border-radius: 2px; z-index: 1; }
 
 /* つまんでいる最中のビーズ */
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 20; pointer-events: none; filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.6)); transition: width 0.18s var(--ease), height 0.18s var(--ease); }
@@ -179,7 +207,7 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 /* 押しただけのとき：粒が上へ跳ねて「すべらせて」を教える */
 .slot.nudge img { animation: nudge 0.6s var(--ease); }
 @keyframes nudge { 30% { transform: translateY(-14px); } 60% { transform: translateY(-4px); } }
-.slot.holding { background: radial-gradient(120% 90% at 50% 35%, #2a2116 0%, #120e0b 70%); box-shadow: inset 0 0 0 1px var(--brass); }
+.slot.holding img { opacity: 0.35; }
 .slot.holding span { color: var(--brass-hi); }
 
 /* 溶液 */
@@ -340,6 +368,56 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
   .intro { width: 100%; left: 0; margin-left: 0; padding-left: max(var(--gut), calc(50% - 260px)); padding-right: max(var(--gut), calc(50% - 260px)); }
   .tray { margin: 0; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
+
+/* パソコン（横長）：左に筒、右の列に棚・液・名前とボタン。横幅いっぱいを使う */
+body.wide .say { left: var(--stage-x, 50%); }
+body.wide .panel, body.wide .dock { left: auto; right: 56px; width: var(--col); margin-left: 0; padding: 0; }
+body.wide .dock { bottom: 40px; }
+body.wide .panel { bottom: 120px; }
+body.wide .intro {
+  left: auto; right: 56px; top: 0; bottom: 0; width: var(--col); margin: 0; padding: 0;
+  display: flex; flex-direction: column; justify-content: center; background: none;
+}
+body.wide .intro h1 { font-size: min(76px, calc(var(--col) / 7.8)); }
+body.wide .tray {
+  grid-auto-flow: row; grid-template-columns: repeat(7, 1fr); grid-template-rows: none; grid-auto-rows: var(--row);
+  overflow: visible; margin: 0; padding: 0 8px;
+  border-left: 1px solid rgba(196, 161, 95, 0.2); border-right: 1px solid rgba(196, 161, 95, 0.2);
+}
+body.wide .liquid { height: 120px; }
+/* 鑑定：左にこすくまくん、真ん中に鑑定書、右にボタン */
+body.wide .appraisal {
+  display: grid; align-items: center; justify-content: center; column-gap: 40px; padding: 40px;
+  grid-template-columns: 260px auto 340px;
+  grid-template-rows: 1fr auto auto 1fr;
+  grid-template-areas: 'kuma cert .' 'kuma cert kept' 'kuma cert actions' 'kuma cert .';
+}
+body.wide .kuma-stage { grid-area: kuma; height: min(62vh, 520px); max-width: none; }
+body.wide #kuma { width: 100%; height: 72%; }
+body.wide .kuma-say { position: static; width: auto; margin-top: 8px; }
+body.wide .cert { grid-area: cert; flex: none; height: min(calc(100vh - 80px), calc((100vw - 800px) * 1.25)); width: auto; aspect-ratio: 4 / 5; max-width: none; }
+body.wide .kept { grid-area: kept; text-align: left; }
+body.wide .actions { grid-area: actions; max-width: none; }
+body.wide .arch-grid { grid-auto-columns: calc(min(58vh, 560px) * 0.8); padding: 8px 56px; scroll-padding: 0 56px; }
+body.wide #mortar-add { max-width: 520px; }
+/* 少し狭い横長：こすくまくんを右の列の上に */
+@media (max-width: 1199px) {
+  body.wide .appraisal {
+    grid-template-columns: auto 320px; grid-template-rows: 1fr auto auto auto 1fr;
+    grid-template-areas: 'cert .' 'cert kuma' 'cert kept' 'cert actions' 'cert .';
+  }
+  body.wide .kuma-stage { height: 220px; }
+  body.wide .cert { height: min(calc(100vh - 80px), calc((100vw - 440px) * 1.25)); }
+}
+/* 鑑定書の詳細：左に鑑定書、右にボタン */
+body.wide .arch-detail {
+  display: grid; column-gap: 56px; padding: 24px 56px 40px; justify-content: center;
+  grid-template-columns: auto minmax(300px, 380px); grid-template-rows: auto 1fr;
+  grid-template-areas: 'head head' 'card actions';
+}
+body.wide .arch-detail .sheet-head { grid-area: head; }
+body.wide .detail-card { grid-area: card; flex: none; height: calc(100vh - 140px); width: calc((100vh - 140px) * 0.8); max-width: none; margin: 0; }
+body.wide .detail-actions { grid-area: actions; align-self: center; max-width: none; padding: 0; }
 
 /* 共有用サムネを撮るときだけ（開発用） */
 body.og .top, body.og .dock, body.og .panel, body.og .say { display: none !important; }
