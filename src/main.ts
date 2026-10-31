@@ -871,6 +871,36 @@ $('#tilt').addEventListener('click', async () => {
   say('スマホを、左右に傾けてみて。');
 });
 
+// ---------- 作り方（右上の？） ----------
+const howtoPages = $('#howto-pages');
+function howtoAt(i: number) {
+  const n = howtoPages.children.length;
+  $('#howto-n').textContent = `${i + 1} / ${n}`;
+  document.querySelectorAll('#howto-dots button').forEach((b, k) => b.setAttribute('aria-current', String(k === i)));
+}
+function openHowto() {
+  sound.unlock();
+  sound.slide();
+  const i = Math.max(0, ORDER.indexOf(stage));
+  $('#howto').hidden = false;
+  howtoPages.scrollLeft = i * howtoPages.clientWidth;
+  howtoAt(i);
+}
+function closeHowto() {
+  sound.tick();
+  $('#howto').hidden = true;
+}
+$('#help').addEventListener('click', openHowto);
+$('#howto-close').addEventListener('click', closeHowto);
+howtoPages.addEventListener('scroll', () => howtoAt(Math.round(howtoPages.scrollLeft / Math.max(1, howtoPages.clientWidth))), { passive: true });
+$('#howto-dots').addEventListener('click', (e) => {
+  const b = (e.target as HTMLElement).closest('button');
+  if (b) howtoPages.scrollTo({ left: Number(b.dataset.i) * howtoPages.clientWidth, behavior: 'smooth' });
+});
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#howto').hidden) closeHowto();
+});
+
 // ---------- 名付ける・鑑定 ----------
 let kuma: Kuma3D | null = null;
 let lastCard: HTMLCanvasElement | null = null;

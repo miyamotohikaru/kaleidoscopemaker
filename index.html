@@ -48,6 +48,7 @@
         <li data-step="look"><span>iii</span>のぞく</li>
         <li data-step="name"><span>iv</span>名付ける</li>
       </ol>
+      <button class="help" id="help" type="button" aria-label="作り方" aria-haspopup="dialog">?</button>
       <button class="snd" id="snd" type="button" aria-pressed="true" aria-label="音">
         <span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="snd-label">音</span>
       </button>
@@ -137,6 +138,37 @@
           <button class="act" id="restart" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.5 12a6.5 6.5 0 1 1-2-4.7M18.5 4.5v3.2h-3.2"/></svg><span>はじめから</span></button>
         </div>
       </div>
+    </div>
+
+    <!-- 作り方（右上の？から） -->
+    <div class="sheet howto" id="howto" hidden role="dialog" aria-modal="true" aria-label="作り方">
+      <div class="sheet-head">
+        <p class="sheet-title">作り方<small id="howto-n">1 / 4</small></p>
+        <button class="close" id="howto-close" type="button" aria-label="閉じる"><i></i><i></i></button>
+      </div>
+      <div class="howto-pages" id="howto-pages">
+        <section class="hpage" aria-label="入れる">
+          <h2 class="h-title"><span class="h-num">i</span>入れる</h2>
+          <ol class="h-steps"><li>棚の粒を、指で筒まで持っていく。</li><li>置いた粒は、つまんで動かせる。</li><li>鏡の数（6・8・12）で、<br />模様のくり返しが変わる。</li><li>乳鉢で宝石を砕いたり、<br />写真を割って入れたりもできる。</li></ol>
+          <div class="h-tips"><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>真ん中に置いたものは、<br />真ん中に映るよ。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>色は4つ、種類は4〜5つくらいが、<br />きれい。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>筒の中、さわりすぎると<br />指のあとがつく。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>40個をこえると、<br />ぎゅうぎゅう。</p></div></div>
+        </section>
+        <section class="hpage" aria-label="満たす">
+          <h2 class="h-title"><span class="h-num">ii</span>満たす</h2>
+          <ol class="h-steps"><li>液をえらぶ。水・オイル・はちみつ。</li><li>色をえらぶ。<br />筒の中の色は、注いでから変わる。</li><li>筒の上を長押しすると、注げる。</li></ol>
+          <div class="h-tips"><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>七分目より上まで入れて。<br />少ないと、泡が残る。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>なみなみを超えると、<br />あふれるよ。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>水と油は、<br />混ざらないからね。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>ちがう色を足すと、<br />にごっていく。</p></div></div>
+        </section>
+        <section class="hpage" aria-label="のぞく">
+          <h2 class="h-title"><span class="h-num">iii</span>のぞく</h2>
+          <ol class="h-steps"><li>縁をなぞると、ゆっくり回る。</li><li>「傾けて回す」を押すと、<br />スマホを傾けて回せる。</li><li>上の「入れる」「満たす」を押すと、<br />作り直せる。</li></ol>
+          <div class="h-tips"><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>暗くてよく見えないときは、<br />粒を足してみて。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>金色ばっかりだと、<br />茶色っぽくなる。</p></div></div>
+        </section>
+        <section class="hpage" aria-label="名付ける">
+          <h2 class="h-title"><span class="h-num">iv</span>名付ける</h2>
+          <ol class="h-steps"><li>名前を入れて、<br />こすくまくんに鑑定してもらう。</li><li>鑑定書は、この端末の一覧にしまわれる。</li><li>ポストすると、<br />のぞいた万華鏡をそのまま届けられる。</li></ol>
+          <div class="h-tips"><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>名前で、少しだけ<br />結果が変わるよ。</p></div><div class="tip"><img src="/charm.png" alt="" width="24" height="30" /><p>……ぼくは、正直に見るよ。</p></div></div>
+        </section>
+      </div>
+      <div class="howto-dots" id="howto-dots"><button type="button" data-i="0" aria-label="入れる"></button><button type="button" data-i="1" aria-label="満たす"></button><button type="button" data-i="2" aria-label="のぞく"></button><button type="button" data-i="3" aria-label="名付ける"></button></div>
     </div>
 
     <!-- 鑑定書一覧（この端末の中だけ） -->
