@@ -27,6 +27,7 @@ export interface PourState {
   cellCol: [number, number, number]; // 筒の中で混ざった色
   bottleCol: [number, number, number]; // 瓶の中の色
   pouring: boolean;
+  spill: number; // あふれた量 0..2
   pourX: number;
   time: number;
   W: number;
@@ -45,6 +46,9 @@ export class Pour3D {
   bottle = new THREE.Group();
   bottleLiq: THREE.Mesh;
   stream: THREE.Mesh;
+  wall: THREE.Mesh;
+  puddle: THREE.Mesh;
+  spillVis = 0;
   pourAmt = 0;
   bottleIn = 0;
   bx = 0;
@@ -219,6 +223,58 @@ export class Pour3D {
     this.stream = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 16, 24, true), this.mats.stream);
     this.stream.renderOrder = 2;
     this.scene.add(this.stream);
+
+    // あふれ：外の壁を伝う膜（縦の筋）と、床に広がる水たまり
+    this.mats.wall = new THREE.ShaderMaterial({
+      uniforms: { uCol: { value: new THREE.Vector3() }, uA: { value: 0 }, uAmt: { value: 0 }, uTime: { value: 0 } },
+      vertexShader: glassVert,
+      fragmentShader: /* glsl */ `
+      uniform vec3 uCol; uniform float uA; uniform float uAmt; uniform float uTime;
+      varying vec3 vN; varying vec3 vV; varying vec2 vUv;
+      float h(float x){ return fract(sin(x*127.1)*43758.5453); }
+      void main(){
+        float k = floor(vUv.x*90.);
+        float len = h(k) * uAmt * 1.4;
+        float run = step(1. - vUv.y, len) * smoothstep(.3, .7, h(k + 7.));
+        float sheet = smoothstep(.0, .25, uAmt) * smoothstep(.75, 1., vUv.y);
+        float m = max(run, sheet);
+        float f = pow(1.-abs(dot(vN,vV)), 2.);
+        float hl = smoothstep(.85, .98, abs(dot(vN, normalize(vec3(-.6,.3,.75)))));
+        gl_FragColor = vec4(uCol*(.35+f) + vec3(1.)*hl*.7, m * (uA*.8 + .25 + hl*.5));
+      }`,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.wall = new THREE.Mesh(new THREE.CylinderGeometry(1.082, 1.082, H, 160, 1, true), this.mats.wall);
+    this.wall.position.y = H / 2;
+    this.mats.puddle = new THREE.ShaderMaterial({
+      uniforms: { uCol: { value: new THREE.Vector3() }, uA: { value: 0 }, uR: { value: 1 }, uTime: { value: 0 } },
+      vertexShader: glassVert,
+      fragmentShader: /* glsl */ `
+      uniform vec3 uCol; uniform float uA; uniform float uR; uniform float uTime;
+      varying vec3 vP; varying vec3 vV;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
+        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
+      void main(){
+        vec2 p = vP.xz;
+        if(length(p) < 1.07) discard; // 筒の下（底のガラス）には描かない
+        float a = atan(p.y, p.x);
+        float edge = uR * (1. + .07*n(vec2(a*3., 1.)) + .04*n(vec2(a*9., 4.)));
+        float in1 = smoothstep(edge, edge - .02, length(p));
+        vec3 R = reflect(-vV, vec3(0.,1.,0.));
+        float win = smoothstep(.96, .995, R.y) * smoothstep(.5, .2, abs(R.x));
+        float rim = smoothstep(edge - .06, edge - .01, length(p)) * in1;
+        gl_FragColor = vec4(uCol*.1 + vec3(1.,.95,.88)*(win*.8 + rim*.45), in1 * (uA*.35 + .07 + win*.4 + rim*.35));
+      }`,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.puddle = new THREE.Mesh(new THREE.CircleGeometry(2.4, 96), this.mats.puddle);
+    this.puddle.rotation.x = -Math.PI / 2;
+    this.puddle.position.y = 0.001;
+    this.puddle.renderOrder = -1;
+    this.scene.add(this.wall, this.puddle);
   }
 
   update(dt: number, s: PourState) {
@@ -237,7 +293,9 @@ export class Pour3D {
     cam.updateProjectionMatrix();
 
     const L = s.liquid ? LIQ[s.liquid] : null;
-    const h = Math.max(0.001, s.level * H * 0.94);
+    // あふれている間は、液面が縁まで盛り上がる
+    this.spillVis += (Math.min(1, s.spill * 2.5) - this.spillVis) * Math.min(1, dt * 3);
+    const h = Math.max(0.001, s.level * H * 0.94 + (s.spill > 0 ? H * 0.07 : 0));
     const col = new THREE.Vector3(...s.cellCol);
     const bcol = new THREE.Vector3(...s.bottleCol);
     const show = L && s.level > 0.005;
@@ -250,6 +308,14 @@ export class Pour3D {
       this.mats[k].uniforms.uA.value = L?.a ?? 0;
     }
     this.mats.liqTop.uniforms.uTime.value = s.time;
+    const sv = this.spillVis;
+    this.wall.visible = this.puddle.visible = !!L && sv > 0.005;
+    for (const k of ['wall', 'puddle']) {
+      (this.mats[k].uniforms.uCol.value as THREE.Vector3).copy(col);
+      this.mats[k].uniforms.uA.value = L?.a ?? 0;
+    }
+    this.mats.wall.uniforms.uAmt.value = sv;
+    this.mats.puddle.uniforms.uR.value = 1.08 + sv * 0.45;
     this.mats.stream.uniforms.uTime.value = s.time;
 
     // 瓶

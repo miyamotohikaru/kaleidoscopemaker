@@ -46,6 +46,7 @@ export class Cell {
   murk = 0; // 色を混ぜすぎた濁り
   cloud = 0; // 水と油を混ぜた白い濁り
   smudge = 0; // 触りすぎた指のあと
+  spill = 0; // なみなみを超えて注いで、あふれた量（筒の外と、のぞき穴のガラスが濡れる）
   poured = new Set<string>();
   angle = 0; // 筒の回転
   gdir = Math.PI * 1.5; // 画面上の重力の向き（下）

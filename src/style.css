@@ -201,6 +201,8 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
   position: relative; height: 10px; margin: 14px 0 0; border: 1px solid var(--line); border-radius: 1px; overflow: hidden;
   background: repeating-linear-gradient(to right, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
 }
+.meter.over { border-color: rgba(240, 150, 120, 0.8); animation: over 0.9s ease-in-out infinite; }
+@keyframes over { 50% { border-color: rgba(240, 150, 120, 0.25); } }
 .m-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; opacity: 0.85; transition: width 0.12s linear, background 0.4s var(--ease); }
 .amount { margin-top: 6px; text-align: center; font-size: 12px; color: var(--brass); letter-spacing: 0.2em; min-height: 1.7em; }
 .tint { width: 48px; height: 48px; display: grid; place-items: center; }
