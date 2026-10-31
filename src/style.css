@@ -358,6 +358,47 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .detail-actions { width: 100%; max-width: 420px; padding-top: 14px; flex: none; }
 .link.danger.armed { color: #e0707a; text-decoration-color: rgba(224, 112, 122, 0.5); }
 
+/* 作り方：右上の？。手順ごとに横へ送る1枚ずつ。こすくまくんのひとことは吹き出しで */
+.help { width: 36px; height: 44px; font-family: var(--lat); font-size: 19px; color: var(--brass-hi); }
+.help::before { content: ''; position: absolute; width: 24px; height: 24px; margin: -1px 0 0 -12px; left: 50%; top: 50%; transform: translateY(-50%); border: 1px solid var(--line); border-radius: 50%; }
+.help { position: relative; }
+.howto { justify-content: flex-start; overflow: hidden; }
+.howto .sheet-head { max-width: 600px; }
+.howto-pages { max-width: calc(600px + var(--gut) * 2); }
+.howto-pages {
+  flex: 1 1 0; min-height: 0; width: calc(100% + var(--gut) * 2); display: grid; grid-auto-flow: column; grid-auto-columns: 100%;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; touch-action: pan-x pan-y;
+}
+.howto-pages::-webkit-scrollbar { display: none; }
+.hpage { scroll-snap-align: start; overflow-y: auto; padding: 4px var(--gut) 12px; max-width: 560px; width: 100%; margin: 0 auto; }
+.h-num { font-family: var(--lat); font-style: italic; font-size: 20px; color: var(--brass); margin-right: 12px; letter-spacing: 0; }
+.h-title { display: flex; align-items: baseline; margin: 2px 0 10px; font-weight: 200; font-size: 26px; line-height: 1.3; letter-spacing: 0.12em; }
+.h-steps { list-style: none; counter-reset: s; }
+.h-steps li { counter-increment: s; position: relative; padding-left: 24px; font-size: 14px; line-height: 1.7; color: var(--ink); }
+.h-steps li + li { margin-top: 3px; }
+.h-steps li::before { content: counter(s); position: absolute; left: 0; top: 0; font-family: var(--lat); font-size: 15px; color: var(--brass); }
+.h-tips { display: grid; gap: 8px; margin-top: 14px; }
+.tip { display: flex; align-items: flex-start; gap: 10px; }
+.tip img { flex: none; margin-top: 2px; width: 22px; height: auto; }
+.tip p {
+  position: relative; padding: 6px 13px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.03);
+  font-size: 14px; line-height: 1.65;
+}
+.tip p::before { content: ''; position: absolute; left: -6px; top: 11px; width: 10px; height: 10px; background: var(--velvet); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+/* 背の低い画面：吹き出しを2列にして一画面に収める */
+/* 背の低い画面：吹き出しを1行ずつに詰めて、一画面に収める */
+@media (max-height: 620px) {
+  .h-tips { gap: 6px; margin-top: 10px; }
+  .tip img { display: none; }
+  .tip p { font-size: 13px; padding: 5px 12px; }
+  .tip p br { display: none; }
+  .tip p::before { display: none; }
+}
+.howto-dots { display: flex; justify-content: center; gap: 4px; padding: 6px 0 2px; flex: none; }
+.howto-dots button { width: 32px; height: 32px; position: relative; }
+.howto-dots button::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--line); transition: background var(--t) var(--ease), transform var(--t) var(--ease); }
+.howto-dots button[aria-current='true']::after { background: var(--brass); transform: scale(1.3); }
+
 /* 携帯だけ改行 */
 .mobile-break { display: none; }
 @media screen and (max-width: 620px) { .mobile-break { display: inline; } }
