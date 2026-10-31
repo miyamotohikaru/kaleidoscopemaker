@@ -613,7 +613,8 @@ function layout() {
     goal.cy = top + 40 + avail / 2;
   } else {
     const avail = bottom - top - 10;
-    goal.R = Math.max(120, Math.min((w / 2) * 1.16, avail / 2, 420));
+    // できあがった万華鏡は、円の端まで全部見えるように（左右に少し余白）
+    goal.R = Math.max(120, Math.min(w / 2 - 10, avail / 2, 420));
     goal.cx = w / 2;
     goal.cy = top + avail / 2;
   }
