@@ -10,6 +10,12 @@ const BRASS = '#9a7637';
 const MIN = "'Noto Serif JP', 'Hiragino Mincho ProN', serif";
 const LAT = "'Cormorant Garamond', 'Noto Serif JP', serif";
 
+export interface Spec {
+  liquid: string; // 水・オイル・はちみつ
+  count: number; // 入れた粒
+  items?: string[]; // 中身の内訳（「青のガラス玉 3」のように、多い順）
+}
+
 function img(src: string) {
   return new Promise<HTMLImageElement>((res) => {
     const i = new Image();
@@ -27,6 +33,20 @@ function spaced(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, 
     ctx.fillText(c, cx + ctx.measureText(c).width / 2, y);
     cx += ctx.measureText(c).width + sp;
   }
+}
+
+// 字間をあけて、左寄せ・右寄せで置く
+function spacedAt(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, sp: number, align: CanvasTextAlign) {
+  const chars = [...s];
+  const w = chars.reduce((a, c) => a + ctx.measureText(c).width, 0) + sp * (chars.length - 1);
+  let cx = align === 'right' ? x - w : align === 'center' ? x - w / 2 : x;
+  ctx.save();
+  ctx.textAlign = 'left';
+  for (const c of chars) {
+    ctx.fillText(c, cx, y);
+    cx += ctx.measureText(c).width + sp;
+  }
+  ctx.restore();
 }
 
 // ランクで紙を変える：失敗は古びた紙と灰色の判子、上手は金箔、神は黒漆に金
@@ -72,12 +92,13 @@ function foilCorner(x: CanvasRenderingContext2D, cx: number, cy: number, sx: num
   x.restore();
 }
 
-export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdict, domain: string): Promise<HTMLCanvasElement> {
+export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdict, domain: string, spec?: Spec): Promise<HTMLCanvasElement> {
   const T = themeOf(v.rank);
   await Promise.all([
     document.fonts.load(`300 40px 'Noto Serif JP'`, name + '鑑定書'),
     document.fonts.load(`500 40px 'Noto Serif JP'`, v.rankName),
     document.fonts.load(`400 24px 'Cormorant Garamond'`),
+    document.fonts.load(`400 40px 'Noto Serif JP'`, '溶液入れた粒中身種個ほか' + (spec?.liquid ?? '') + (spec?.items ?? []).join('')),
   ]).catch(() => {});
   const kuma = await img('/appraiser.png');
   const c = document.createElement('canvas');
@@ -141,8 +162,8 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   spaced(x, 'KALEIDOSCOPE  APPRAISAL', W / 2, 188, 7);
 
   // 万華鏡
-  const cy = 480;
-  const r = 268;
+  const cy = 476;
+  const r = 236;
   x.save();
   x.shadowColor = 'rgba(40,25,10,.35)';
   x.shadowBlur = 30;
@@ -167,6 +188,79 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   x.clip();
   x.drawImage(scope, W / 2 - r, cy - r, r * 2, r * 2);
   x.restore();
+
+  // 注記：図の中の点から細い真鍮の線を引き、左に溶液と入れた粒、右に中身の内訳
+  if (spec) {
+    const cx = W / 2;
+    const point = (ang: number, k: number): [number, number] => [cx + Math.cos((ang * Math.PI) / 180) * r * k, cy + Math.sin((ang * Math.PI) / 180) * r * k];
+    const lead = (from: [number, number], to: [number, number]) => {
+      x.save();
+      x.lineCap = 'round';
+      // 画の上でも見えるよう、紙の色で縁取ってから真鍮の線
+      for (const [w, col] of [
+        [4, T.paper],
+        [1.2, T.frame],
+      ] as const) {
+        x.strokeStyle = col;
+        x.lineWidth = w;
+        x.beginPath();
+        x.moveTo(...from);
+        x.lineTo(...to);
+        x.stroke();
+      }
+      x.fillStyle = T.paper;
+      x.strokeStyle = T.frame;
+      x.lineWidth = 1.6;
+      x.beginPath();
+      x.arc(from[0], from[1], 5, 0, Math.PI * 2);
+      x.fill();
+      x.stroke();
+      x.restore();
+    };
+    const note = (label: string, px: number, py: number, align: CanvasTextAlign) => {
+      x.textAlign = align;
+      x.fillStyle = T.frame;
+      x.font = `400 19px ${MIN}`;
+      spacedAt(x, label, px, py, 4, align);
+    };
+    const lx = cx - r - 34; // 左の注記の右端
+    const rx = cx + r + 34; // 右の注記の左端
+
+    // 溶液
+    lead(point(200, 0.72), [lx + 8, 372]);
+    note('溶液', lx, 366, 'right');
+    x.fillStyle = T.ink;
+    x.font = `400 30px ${MIN}`;
+    x.textAlign = 'right';
+    x.fillText(spec.liquid, lx, 410);
+
+    // 入れた粒
+    lead(point(150, 0.5), [lx + 8, 552]);
+    note('入れた粒', lx, 546, 'right');
+    x.fillStyle = T.ink;
+    x.font = `400 30px ${MIN}`;
+    x.textAlign = 'right';
+    x.fillText(`${spec.count} 個`, lx, 590);
+
+    // 中身：名前と数を1行ずつ。入りきらない分は「ほか n 種」
+    const items = spec.items?.length ? spec.items : ['なし'];
+    lead(point(-25, 0.68), [rx - 8, 296]);
+    note(spec.items?.length ? `中身　${spec.items.length} 種` : '中身', rx, 290, 'left');
+    x.fillStyle = T.ink;
+    x.textAlign = 'left';
+    const MAX = 11;
+    const rows = items.length > MAX ? [...items.slice(0, MAX - 1), `ほか ${items.length - (MAX - 1)} 種`] : items;
+    const colW = W - 64 - rx;
+    rows.forEach((t, i) => {
+      let fs = 21;
+      do {
+        x.font = `300 ${fs}px ${MIN}`;
+        fs -= 1;
+      } while (x.measureText(t).width > colW && fs > 14);
+      x.fillText(t, rx, 334 + i * 34);
+    });
+    x.textAlign = 'center';
+  }
 
   // 名前
   x.fillStyle = T.ink;

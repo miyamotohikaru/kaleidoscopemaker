@@ -9,7 +9,7 @@ import { drawCard } from './card';
 import { decode, dust, encode } from './share';
 import { Kuma3D, preloadKuma } from './kuma3d';
 import { Pour3D } from './pour3d';
-import { deleteCert, fmtDate, listCerts, putCert, thumbOf, toBlob, type Cert } from './archive';
+import { deleteCert, fmtDate, listCerts, putCert, THUMB_W, thumbOf, toBlob, upgradeThumbs, type Cert } from './archive';
 
 type Stage = 'intro' | 'fill1' | 'fill2' | 'look' | 'name' | 'appraise';
 
@@ -951,7 +951,11 @@ async function doAppraise() {
     const force = new URLSearchParams(location.search).get('rank');
     if (force) Object.assign(verdict, { rank: +force, rankName: RANKS[+force], pos: (+force + 0.5) / 7 });
   }
-  const cardP = drawCard(scope, name, verdict, DOMAIN);
+  const cardP = drawCard(scope, name, verdict, DOMAIN, {
+    liquid: cell.liquid?.label ?? 'なし',
+    count: cell.bodies.filter((b) => !b.small).length,
+    items: contents(cell),
+  });
   await wait(500);
   kuma.setScope(scope);
   kuma.peek = 0;
@@ -980,7 +984,7 @@ async function doAppraise() {
   // 鑑定書は出た瞬間にしまう（途中で離れても残る）
   try {
     const [blob, thumb] = await Promise.all([toBlob(card), thumbOf(card)]);
-    await putCert({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, rankName: verdict.rankName, rank: verdict.rank, line: verdict.line, date: Date.now(), code, card: blob, thumb });
+    await putCert({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name, rankName: verdict.rankName, rank: verdict.rank, line: verdict.line, date: Date.now(), code, card: blob, thumb, thumbW: THUMB_W });
     $('#kept').textContent = '鑑定書を、一覧にしまいました。';
     refreshArchCount();
   } catch {
@@ -1028,6 +1032,32 @@ $('#save').addEventListener('click', async () => {
   if (lastCard) saveImage(await toBlob(lastCard, 'image/png'), lastName);
 });
 
+// 鑑定書に書く中身：棚の名前ごとの数（多い順）。ラメはひとつまみ、乳鉢の粉は「すこし」
+function contents(c: Cell): string[] {
+  const big = new Map<string, number>();
+  const small = new Map<GemName, number>();
+  const stone = (g: GemName) => MORTAR_STONES.find((m) => m.color === g)?.label ?? '石';
+  for (const b of c.bodies) {
+    if (b.small) {
+      small.set(b.color as GemName, (small.get(b.color as GemName) ?? 0) + 1);
+      continue;
+    }
+    const label =
+      b.kind === Kind.Photo
+        ? '写真のかけら'
+        : b.kind === Kind.Mineral && b.r < 0.06
+          ? `砕いた${stone(b.color as GemName)}`
+          : (SHELF.find((s) => s.kind === b.kind && s.color === b.color)?.label ?? 'かけら');
+    big.set(label, (big.get(label) ?? 0) + 1);
+  }
+  const out = [...big].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${l} ${n}`);
+  for (const [g, n] of small) {
+    const lame = SHELF.find((s) => s.pinch && s.color === g);
+    out.push(lame ? `${lame.label} ${Math.max(1, Math.round(n / (lame.pinch ?? 36)))}つまみ` : `${stone(g)}の粉 すこし`);
+  }
+  return out;
+}
+
 // ---------- 鑑定書一覧 ----------
 let certs: Cert[] = [];
 let current: Cert | null = null;
@@ -1041,6 +1071,7 @@ async function openArchive() {
   sound.unlock();
   sound.slide();
   await refreshArchCount();
+  await upgradeThumbs(certs);
   urls.splice(0).forEach((u) => URL.revokeObjectURL(u));
   $('#arch-count').textContent = certs.length ? `${certs.length} 枚` : '';
   $('#arch-empty').hidden = certs.length > 0;
