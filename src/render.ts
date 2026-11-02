@@ -124,6 +124,7 @@ export class Renderer {
       uNet: { value: 0 },
       uMurk: { value: 0 },
       uCloud: { value: 0 },
+      uAir: { value: 0 },
     });
     this.mats.view = mk(S.viewFrag, {
       uChamber: { value: null },
@@ -309,6 +310,7 @@ export class Renderer {
     L.uNet.value = v.mode;
     L.uMurk.value = cell.murk;
     L.uCloud.value = cell.cloud;
+    L.uAir.value = cell.liquid && cell.level > 0.02 ? 1 - cell.level : 0;
     this.pass(this.mats.liquid, this.chamberRT);
     gl.setRenderTarget(this.chamberRT);
     gl.render(this.charmScene, this.cam);

@@ -231,6 +231,7 @@ uniform float uHasLiquid;
 uniform float uNet;
 uniform float uMurk;
 uniform float uCloud;
+uniform float uAir;     // 筒の中の空気の割合 0..1（なみなみなら 0）
 varying vec2 vUv;
 ${NOISE}
 void main(){
@@ -287,6 +288,48 @@ void main(){
   // 失敗：水と油は混ざらず、白い粒のもやになる
   float blob = smoothstep(.35, .75, fbm(p*3.5 + flow*2. + uTime*.03));
   c = mix(c, vec3(.32,.31,.29) * (.6 + .6*blob) + c*.25, uCloud * .7 * wet * (.5 + .5*blob));
+  // 泡：液が足りないぶん、丸い泡が液の中をゆっくり上っていく。
+  // 万華鏡は重力側（下）の扇を映すので、上にたまる空気だけでは見えない。泡にして扇の中も通す。
+  // 縁は細く明るく、その内側は暗い帯、中は景色が逆さに小さく映り、上に白い光の点
+  if(uAir > .02 && uHasLiquid > .5){
+    vec2 upv = -uG;
+    vec2 side = vec2(-upv.y, upv.x);
+    float nB = floor(3. + uAir*14.);
+    for(int i=0;i<16;i++){
+      float fi = float(i);
+      if(fi >= nB) break;
+      float h1 = hash11(fi*7.13 + .3), h2 = hash11(fi*3.71 + 1.9), h3 = hash11(fi*5.29 + 4.2);
+      float rad = (.05 + .07*h2) * (.7 + .6*uAir);
+      float s = fract(h3 + t*(.018 + .03*(1.-h2)));
+      vec2 bp;
+      if(mod(fi, 2.) < .5){
+        // 半分は、万華鏡が映す下の扇（真下から左右へ約20°）の中を、縁から真ん中へ上っていく
+        float ang = (h1*2.-1.)*.34 + .03*sin(t*.9 + fi*2.);
+        float rr = .92 - .8*s;
+        bp = (uG*cos(ang) + side*sin(ang))*rr;
+      } else {
+        // 残りは筒の中どこでも。下から上へ
+        float along = -1.05 + 2.1*s;
+        float lat = (h1*2.-1.)*.85 + .04*sin(t*.9 + fi*2.);
+        bp = upv*along + side*lat;
+      }
+      if(length(bp) > .97 - rad) continue;
+      if(uLevel < .999 && dot(bp, upv) > surf - rad) continue; // 液の外（上の空気）には出さない
+      vec2 dv = p - bp;
+      float d = length(dv) / rad;
+      if(d > 1.2) continue;
+      float inside = 1. - smoothstep(.96, 1.02, d);
+      vec3 lens = texture2D(uBeads, (bp - dv*.55)*.5 + .5).rgb;
+      float band = smoothstep(.45, .88, d) * inside;
+      vec3 cin = lens*(1. - band*.95) + vec3(.06,.07,.08)*(1.-band);
+      c = mix(c, cin, inside);
+      float rim = exp(-pow((d - .95)*16., 2.));
+      c += vec3(.85,.92,1.)*rim*.7;
+      vec2 sp = bp + (upv*.4 - side*.34)*rad;
+      c += vec3(1.)*1.1*(1. - smoothstep(.0, .2*rad, length(p - sp)));
+      c += vec3(1.)*.35*(1. - smoothstep(.0, .1*rad, length(p - (bp - (upv*.42 - side*.3)*rad))));
+    }
+  }
   // 液面の線
   if(uHasLiquid > .5 && uLevel > .002 && uLevel < .999){
     float m = exp(-abs(up - surf)*90.);

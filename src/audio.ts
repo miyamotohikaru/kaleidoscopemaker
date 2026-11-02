@@ -402,26 +402,12 @@ export class Sound {
     this.pourNodes = null;
   }
 
-  // 絞りが開く：息のような風の音と、ガラスをこする柔らかい音
+  // 絞りが開く：ガラスをこする柔らかい音（風の「シュワー」はノイズに聞こえるので鳴らさない）
   open() {
     if (!this.ctx || !this.enabled) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + 0.05;
     const o = this.out(0, 1.4);
-    const s = ctx.createBufferSource();
-    s.buffer = this.white;
-    const f = ctx.createBiquadFilter();
-    f.type = 'bandpass';
-    f.Q.value = 1.2;
-    f.frequency.setValueAtTime(400, t);
-    f.frequency.exponentialRampToValueAtTime(3200, t + 2.4);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.05, t + 1.2);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
-    s.connect(f).connect(g).connect(o);
-    s.start(t);
-    s.stop(t + 3.3);
     for (const [fr, d] of [
       [1318.5, 0],
       [1975.5, 0.35],
