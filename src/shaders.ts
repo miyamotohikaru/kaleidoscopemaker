@@ -289,35 +289,44 @@ void main(){
   float blob = smoothstep(.35, .75, fbm(p*3.5 + flow*2. + uTime*.03));
   c = mix(c, vec3(.32,.31,.29) * (.6 + .6*blob) + c*.25, uCloud * .7 * wet * (.5 + .5*blob));
   // 泡（筒を上から見る窓のとき）：液が足りないぶん、丸い泡が液の中をゆっくり上っていく。
-  // 中は透けて少し白っぽく、縁は細い暗い線と銀色の帯、上に白い光の点。のぞく段の泡は viewFrag で描く
+  // 縁は細く明るく、その内側は暗い帯、中は景色が逆さに小さく映り、上に白い光の点。
+  // のぞく段は鏡で増やすとビーズと同じ飾りに見えるので、ここでは描かず viewFrag で手前に描く
   float airW = uAir * (1. - uNet);
   if(airW > .02 && uHasLiquid > .5){
     vec2 upv = -uG;
     vec2 side = vec2(-upv.y, upv.x);
     float nB = floor(3. + airW*14.);
-    float px = fwidth(p.x);
     for(int i=0;i<16;i++){
       float fi = float(i);
       if(fi >= nB) break;
       float h1 = hash11(fi*7.13 + .3), h2 = hash11(fi*3.71 + 1.9), h3 = hash11(fi*5.29 + 4.2);
-      float rad = (.03 + .06*h2*h2) * (.7 + .6*airW);
+      float rad = (.05 + .07*h2) * (.7 + .6*airW);
       float s = fract(h3 + t*(.018 + .03*(1.-h2)));
-      float along = -1.05 + 2.1*s;
-      float lat = (h1*2.-1.)*.85 + .03*sin(t*1.3 + fi*2.);
-      vec2 bp = upv*along + side*lat;
+      vec2 bp;
+      if(mod(fi, 2.) < .5){
+        float ang = (h1*2.-1.)*.34 + .03*sin(t*.9 + fi*2.);
+        float rr = .92 - .8*s;
+        bp = (uG*cos(ang) + side*sin(ang))*rr;
+      } else {
+        float along = -1.05 + 2.1*s;
+        float lat = (h1*2.-1.)*.85 + .04*sin(t*.9 + fi*2.);
+        bp = upv*along + side*lat;
+      }
       if(length(bp) > .97 - rad) continue;
       if(uLevel < .999 && dot(bp, upv) > surf - rad) continue; // 液の外（上の空気）には出さない
-      float d = length(p - bp) / rad;
-      if(d > 1.3) continue;
-      float inside = 1. - smoothstep(1. - px/rad*1.5, 1., d);
-      float lm = dot(c, vec3(.3,.59,.11));
-      vec3 clear = mix(c, vec3(lm), .35)*.8 + vec3(.035,.04,.045);
-      float silver = smoothstep(.68, .98, d) * inside;
-      clear = clear*(1. - .4*silver) + vec3(.8,.85,.9)*silver*silver*.3;
-      c = mix(c, clear, inside);
-      c *= 1. - .65*exp(-pow((d - 1.)*rad/px/1.3, 2.));
-      vec2 sp = bp + (upv*.42 - side*.36)*rad;
-      c += vec3(1.)*(1. - smoothstep(.0, .2*rad, length(p - sp)));
+      vec2 dv = p - bp;
+      float d = length(dv) / rad;
+      if(d > 1.2) continue;
+      float inside = 1. - smoothstep(.96, 1.02, d);
+      vec3 lens = texture2D(uBeads, (bp - dv*.55)*.5 + .5).rgb;
+      float band = smoothstep(.45, .88, d) * inside;
+      vec3 cin = lens*(1. - band*.95) + vec3(.06,.07,.08)*(1.-band);
+      c = mix(c, cin, inside);
+      float rim = exp(-pow((d - .95)*16., 2.));
+      c += vec3(.85,.92,1.)*rim*.7;
+      vec2 sp = bp + (upv*.4 - side*.34)*rad;
+      c += vec3(1.)*1.1*(1. - smoothstep(.0, .2*rad, length(p - sp)));
+      c += vec3(1.)*.35*(1. - smoothstep(.0, .1*rad, length(p - (bp - (upv*.42 - side*.3)*rad))));
     }
   }
   // 液面の線
