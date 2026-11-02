@@ -224,14 +224,23 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .liquid .vial::after { content: ''; position: absolute; top: 4px; left: 4px; width: 2px; height: 70%; background: rgba(255, 255, 255, 0.35); border-radius: 2px; }
 .liquid b { font-weight: 300; font-size: 14px; }
 .tints { display: flex; justify-content: center; gap: 4px; }
-/* 注いだ量の棒。目盛りは1分目ごと */
-.meter {
-  position: relative; height: 10px; margin: 14px 0 0; border: 1px solid var(--line); border-radius: 1px; overflow: hidden;
-  background: repeating-linear-gradient(to right, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
+/* 注いだ量の縦のメーター：筒の左に立てる。目盛りは1分目ごと、七分目だけ明るい真鍮 */
+.vmeter {
+  position: fixed; z-index: 3; width: 12px; opacity: 0; pointer-events: none;
+  transition: opacity var(--t) var(--ease);
 }
-.meter.over { border-color: rgba(240, 150, 120, 0.8); animation: over 0.9s ease-in-out infinite; }
+body[data-stage='fill2']:not(.busy) .vmeter { opacity: 1; }
+.vm-bar {
+  position: relative; width: 12px; height: 100%; border: 1px solid var(--brass); background: rgba(255, 255, 255, 0.03);
+  background-image: repeating-linear-gradient(to top, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
+}
+.vm-bar .m-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; opacity: 0.85; transition: height 0.12s linear, background 0.4s var(--ease); }
+.vm-seven { position: absolute; left: -5px; right: -5px; bottom: 70%; height: 2px; background: var(--brass-hi); }
+.vm-top, .vm-seven-label { position: absolute; left: -2px; font-size: 11px; line-height: 1; white-space: nowrap; }
+.vm-top { top: -18px; color: var(--ink-2); }
+.vm-seven-label { left: 18px; color: var(--brass-hi); bottom: calc(70% - 5px); }
+.vmeter.over .vm-bar { border-color: rgba(240, 150, 120, 0.9); animation: over 0.9s ease-in-out infinite; }
 @keyframes over { 50% { border-color: rgba(240, 150, 120, 0.25); } }
-.m-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; opacity: 0.85; transition: width 0.12s linear, background 0.4s var(--ease); }
 .amount { margin-top: 6px; text-align: center; font-size: 12px; color: var(--brass); letter-spacing: 0.2em; min-height: 1.7em; }
 .tint { width: 48px; height: 48px; display: grid; place-items: center; }
 .tint i { width: 22px; height: 22px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); transition: transform var(--t) var(--ease); }
@@ -374,16 +383,21 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .howto-pages::-webkit-scrollbar { display: none; }
 .hpage { scroll-snap-align: start; overflow-y: auto; padding: 4px var(--gut) 12px; max-width: 560px; width: 100%; margin: 0 auto; }
 .h-num { font-family: var(--lat); font-style: italic; font-size: 20px; color: var(--brass); margin-right: 12px; letter-spacing: 0; }
-.h-title { display: flex; align-items: baseline; margin: 2px 0 10px; font-weight: 200; font-size: 26px; line-height: 1.3; letter-spacing: 0.12em; }
+.h-title { display: flex; align-items: baseline; margin: 0 0 8px; font-weight: 200; font-size: 26px; line-height: 1.3; letter-spacing: 0.12em; }
+.h-fig { margin: 0 0 10px; padding: 8px 8px 4px; background: rgba(255, 255, 255, 0.025); border: 1px solid var(--line); }
+.h-fig svg { display: block; width: 100%; height: auto; max-height: 132px; overflow: visible; }
+@media (max-height: 620px) { .hpage { padding-bottom: 2px; } .h-fig svg { max-height: 76px; } .h-fig { margin-bottom: 6px; } .h-title { font-size: 22px; margin-bottom: 4px; } .h-steps li { font-size: 13px; line-height: 1.5; } .h-steps li + li { margin-top: 1px; } .h-tips { margin-top: 8px; gap: 4px; } }
 .h-steps { list-style: none; counter-reset: s; }
 .h-steps li { counter-increment: s; position: relative; padding-left: 24px; font-size: 14px; line-height: 1.7; color: var(--ink); }
 .h-steps li + li { margin-top: 3px; }
 .h-steps li::before { content: counter(s); position: absolute; left: 0; top: 0; font-family: var(--lat); font-size: 15px; color: var(--brass); }
-.h-tips { display: grid; gap: 8px; margin-top: 14px; }
+.h-tips { display: grid; gap: 6px; margin-top: 12px; }
+/* 図が入ったので、吹き出しは1行ずつに詰める */
+.tip p br { display: none; }
 .tip { display: flex; align-items: flex-start; gap: 10px; }
 .tip img { flex: none; margin-top: 2px; width: 22px; height: auto; }
 .tip p {
-  position: relative; padding: 6px 13px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.03);
+  position: relative; padding: 4px 12px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255, 255, 255, 0.03);
   font-size: 14px; line-height: 1.65;
 }
 .tip p::before { content: ''; position: absolute; left: -6px; top: 11px; width: 10px; height: 10px; background: var(--velvet); border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
@@ -425,5 +439,5 @@ body.og .top, body.og .dock, body.og .panel, body.og .say { display: none !impor
 body.og .intro { opacity: 1 !important; transform: none !important; left: auto; right: 0; top: 0; bottom: 0; width: 44%; margin: 0; padding: 0 36px 0 0; background: none; display: flex; flex-direction: column; justify-content: center; }
 body.og .intro .cta, body.og .intro .lede { display: none; }
 body.og .intro h1 { font-size: 60px; white-space: nowrap; }
-body.og .og-kuma { display: block !important; position: absolute; right: 96px; bottom: 36px; width: 200px; height: auto; filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.6)); transform: rotate(-6deg); }
+body.og .og-kuma { display: block !important; position: absolute; right: 96px; bottom: 36px; width: 200px; height: auto; filter: brightness(1.08) drop-shadow(0 18px 24px rgba(0, 0, 0, 0.6)); transform: rotate(-6deg); }
 body.og .intro { justify-content: flex-start; padding-top: 120px; }

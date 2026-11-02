@@ -218,7 +218,10 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   // こすくまくんと一言
   const kw = 150;
   const kh = (kuma.naturalHeight / Math.max(1, kuma.naturalWidth)) * kw || 188;
+  x.save();
+  x.filter = 'brightness(1.08)';
   x.drawImage(kuma, 120, 1100, kw, kh);
+  x.restore();
   x.textAlign = 'left';
   x.fillStyle = T.ink;
   x.font = `300 31px ${MIN}`;
