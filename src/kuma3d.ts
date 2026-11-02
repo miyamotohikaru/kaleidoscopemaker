@@ -30,20 +30,20 @@ export class Kuma3D {
     this.r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     this.r.outputColorSpace = THREE.SRGBColorSpace;
     this.r.toneMapping = THREE.ACESFilmicToneMapping;
-    this.r.toneMappingExposure = 1.22; // 暗く沈まないように明るめ
+    this.r.toneMappingExposure = 1.12; // 暗く沈まず、黒地で浮きすぎない明るさ
     this.cam.position.set(0, 1.05, 6.2);
     this.cam.lookAt(0, 0.95, 0);
-    const key = new THREE.DirectionalLight(0xfff6ea, 3.0);
+    const key = new THREE.DirectionalLight(0xfff4e4, 2.8);
     key.position.set(-2, 3, 4);
     const rim = new THREE.DirectionalLight(0xffc98a, 2.2);
     rim.position.set(3, 2, -3);
-    // 下からも少し照り返して、体の色を明るく見せる
-    const fill = new THREE.HemisphereLight(0xffffff, 0x8a8278, 1.6);
+    // 下からも少しだけ照り返す（黒地なので強くしすぎない）
+    const fill = new THREE.HemisphereLight(0xfffaf2, 0x4a423a, 1.3);
     this.scene.add(key, rim, fill, this.root);
     const pm = new THREE.PMREMGenerator(this.r);
     this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
     // 金属（筒）だけに映り込みが欲しいので、体への効きは弱く
-    this.scene.environmentIntensity = 0.4;
+    this.scene.environmentIntensity = 0.32;
     pm.dispose();
     // 真鍮の小さな万華鏡（筒の +Y が対物側＝光のほう）
     const brass = new THREE.MeshStandardMaterial({ color: 0xd0a058, metalness: 1, roughness: 0.22, envMapIntensity: 5 });
