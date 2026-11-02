@@ -1488,7 +1488,7 @@ function boot() {
     v.iris = 1.08;
     if (dev === 'fill1') cell.liquid = null;
     if (dev !== 'fill1') liquidIdx = 1;
-    cell.level = cell.levelTarget = cell.liquid ? 1 : 0;
+    cell.level = cell.levelTarget = cell.liquid ? Number(new URLSearchParams(location.search).get('level') ?? 1) : 0;
     resize();
     setStage(dev === 'og' ? 'intro' : (dev as Stage));
     resize();

@@ -231,6 +231,7 @@ uniform float uHasLiquid;
 uniform float uNet;
 uniform float uMurk;
 uniform float uCloud;
+uniform float uAir;     // 筒の中の空気の割合 0..1（なみなみなら 0）
 varying vec2 vUv;
 ${NOISE}
 void main(){
@@ -287,6 +288,47 @@ void main(){
   // 失敗：水と油は混ざらず、白い粒のもやになる
   float blob = smoothstep(.35, .75, fbm(p*3.5 + flow*2. + uTime*.03));
   c = mix(c, vec3(.32,.31,.29) * (.6 + .6*blob) + c*.25, uCloud * .7 * wet * (.5 + .5*blob));
+  // 泡（筒を上から見る窓のとき）：液が足りないぶん、丸い泡が液の中をゆっくり上っていく。
+  // 縁は細く明るく、その内側は暗い帯、中は景色が逆さに小さく映り、上に白い光の点。
+  // のぞく段は鏡で増やすとビーズと同じ飾りに見えるので、ここでは描かず viewFrag で手前に描く
+  float airW = uAir * (1. - uNet);
+  if(airW > .02 && uHasLiquid > .5){
+    vec2 upv = -uG;
+    vec2 side = vec2(-upv.y, upv.x);
+    float nB = floor(3. + airW*14.);
+    for(int i=0;i<16;i++){
+      float fi = float(i);
+      if(fi >= nB) break;
+      float h1 = hash11(fi*7.13 + .3), h2 = hash11(fi*3.71 + 1.9), h3 = hash11(fi*5.29 + 4.2);
+      float rad = (.05 + .07*h2) * (.7 + .6*airW);
+      float s = fract(h3 + t*(.018 + .03*(1.-h2)));
+      vec2 bp;
+      if(mod(fi, 2.) < .5){
+        float ang = (h1*2.-1.)*.34 + .03*sin(t*.9 + fi*2.);
+        float rr = .92 - .8*s;
+        bp = (uG*cos(ang) + side*sin(ang))*rr;
+      } else {
+        float along = -1.05 + 2.1*s;
+        float lat = (h1*2.-1.)*.85 + .04*sin(t*.9 + fi*2.);
+        bp = upv*along + side*lat;
+      }
+      if(length(bp) > .97 - rad) continue;
+      if(uLevel < .999 && dot(bp, upv) > surf - rad) continue; // 液の外（上の空気）には出さない
+      vec2 dv = p - bp;
+      float d = length(dv) / rad;
+      if(d > 1.2) continue;
+      float inside = 1. - smoothstep(.96, 1.02, d);
+      vec3 lens = texture2D(uBeads, (bp - dv*.55)*.5 + .5).rgb;
+      float band = smoothstep(.45, .88, d) * inside;
+      vec3 cin = lens*(1. - band*.95) + vec3(.06,.07,.08)*(1.-band);
+      c = mix(c, cin, inside);
+      float rim = exp(-pow((d - .95)*16., 2.));
+      c += vec3(.85,.92,1.)*rim*.7;
+      vec2 sp = bp + (upv*.4 - side*.34)*rad;
+      c += vec3(1.)*1.1*(1. - smoothstep(.0, .2*rad, length(p - sp)));
+      c += vec3(1.)*.35*(1. - smoothstep(.0, .1*rad, length(p - (bp - (upv*.42 - side*.3)*rad))));
+    }
+  }
   // 液面の線
   if(uHasLiquid > .5 && uLevel > .002 && uLevel < .999){
     float m = exp(-abs(up - surf)*90.);
@@ -318,6 +360,7 @@ uniform float uStretch;   // 扇の角度を何倍の範囲から拾うか
 uniform float uGuide;     // 鏡の線を見せる 0..1
 uniform float uSmudge;    // 指のあと 0..1
 uniform float uSpill;     // あふれた液がガラスに垂れた膜 0..1
+uniform float uAir;       // 筒の中の空気の割合 0..1（なみなみなら 0）
 varying vec2 vUv;
 ${NOISE}
 
@@ -426,6 +469,43 @@ void main(){
       vec3 film = .5 + .5*cos(6.2831*(vnoise(p*4.)*1.5 + vec3(0., .33, .67)));
       float lm = dot(col, vec3(.3,.59,.11));
       col = mix(col, vec3(lm)*.7 + film*.06 + vec3(.05,.045,.04), m * uSpill * .75);
+    }
+    // 泡：液が足りないと、のぞいた景色の手前を丸い泡がゆっくり上っていく。
+    // 鏡では増やさない（模様に並ぶとビーズと同じ飾りに見えるため）。大小まちまちで、ときどき小さな泡が連なる。
+    // 中は透けて少し白っぽく、縁は1〜2pxの暗い線と銀色の帯、左上に白い光の点、右下にうすい照り返し
+    if(uAir > .02){
+      float nB = floor(6. + uAir*26.);
+      for(int i=0;i<32;i++){
+        float fi = float(i);
+        if(fi >= nB) break;
+        float h1 = hash11(fi*7.13 + .3), h2 = hash11(fi*3.71 + 1.9), h3 = hash11(fi*5.29 + 4.2), h4 = hash11(fi*2.17 + 8.1);
+        float rad = (.028 + .085*h2*h2) * (.8 + .6*uAir);
+        float s = fract(h3 + uTime*(.012 + .028*(1.-h2)));
+        // 3つに1つは、前の泡のすぐ下に続く小さな泡（連なり）
+        vec2 bp = vec2((h1*2.-1.)*.88 + .025*sin(uTime*1.1 + fi*2.3), -1.15 + 2.3*s);
+        if(h4 < .33){
+          float fj = fi - 1.;
+          float g1 = hash11(fj*7.13 + .3), g3 = hash11(fj*5.29 + 4.2), g2 = hash11(fj*3.71 + 1.9);
+          float sj = fract(g3 + uTime*(.012 + .028*(1.-g2)));
+          bp = vec2((g1*2.-1.)*.88 + .025*sin(uTime*1.1 + fj*2.3) + (h1-.5)*.05, -1.15 + 2.3*sj - .06 - h2*.05);
+          rad = .01 + .012*h1;
+        }
+        if(length(bp) > .96) continue;
+        vec2 dv = p - bp;
+        float d = length(dv) / rad;
+        if(d > 1.4) continue;
+        float inside = 1. - smoothstep(1. - px/rad*1.5, 1., d);
+        float lm = dot(col, vec3(.3,.59,.11));
+        vec3 clear = mix(col, vec3(lm), .4)*.72 + vec3(.03,.034,.04);
+        float silver = smoothstep(.62, .98, d) * inside;
+        clear = clear*(1. - .45*silver) + vec3(.82,.86,.9)*silver*silver*.32;
+        float cres = exp(-pow((d - .8)*9., 2.)) * smoothstep(.2, .8, dot(dv/(d*rad+1e-5), vec2(.62,-.78))) * inside;
+        clear += vec3(.9,.93,1.)*cres*.22;
+        col = mix(col, clear, inside);
+        col *= 1. - .7*exp(-pow((d - 1.)*rad/px/1.2, 2.));
+        vec2 sp = bp + vec2(-.36, .4)*rad;
+        col += vec3(1.)*1.1*(1. - smoothstep(.0, .19*rad + px, length(p - sp)));
+      }
     }
     // 光の輪（絞りが開く）
     float ir = uIris;

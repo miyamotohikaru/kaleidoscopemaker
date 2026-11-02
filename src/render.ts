@@ -124,6 +124,7 @@ export class Renderer {
       uNet: { value: 0 },
       uMurk: { value: 0 },
       uCloud: { value: 0 },
+      uAir: { value: 0 },
     });
     this.mats.view = mk(S.viewFrag, {
       uChamber: { value: null },
@@ -143,6 +144,7 @@ export class Renderer {
       uGuide: { value: 0 },
       uSmudge: { value: 0 },
       uSpill: { value: 0 },
+      uAir: { value: 0 },
     });
     this.mats.edge = mk(S.edgeFrag, {
       uScene: { value: null },
@@ -309,6 +311,7 @@ export class Renderer {
     L.uNet.value = v.mode;
     L.uMurk.value = cell.murk;
     L.uCloud.value = cell.cloud;
+    L.uAir.value = cell.liquid && cell.level > 0.02 ? 1 - cell.level : 0;
     this.pass(this.mats.liquid, this.chamberRT);
     gl.setRenderTarget(this.chamberRT);
     gl.render(this.charmScene, this.cam);
@@ -335,6 +338,7 @@ export class Renderer {
     V.uGuide.value = v.guide;
     V.uSmudge.value = cell.smudge;
     V.uSpill.value = Math.min(1, cell.spill * 2.5);
+    V.uAir.value = cell.liquid && cell.level > 0.02 ? 1 - cell.level : 0;
     V.uStretch.value = Math.min(1.9, 0.8 / (Math.PI / v.mirrors));
     this.pass(this.mats.view, post.scene);
     this.postChain(v, post, target, scale);
