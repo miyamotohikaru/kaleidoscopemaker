@@ -1480,16 +1480,6 @@ function frame(now: number) {
     for (const h of hs) sound.hit(h.kind, h.other, h.speed, h.x, h.wet, h.r, cell.liquid?.id ?? null);
     cell.hits.length = 0;
   }
-  if (stage !== 'intro') {
-    let sm = 0;
-    let cnt = 0;
-    for (const b of cell.bodies)
-      if (b.small) {
-        sm += Math.hypot(b.vx, b.vy);
-        cnt++;
-      }
-    sound.flow(cnt ? Math.min(1, (sm / cnt) * 6) * Math.min(1, cnt / 80) : 0);
-  } else sound.flow(0);
   // 鏡の向きは重力の向き（下）に固定。置いた場所がそのまま模様の場所になる
   {
     let dw = -Math.PI / 2 - v.wedge;

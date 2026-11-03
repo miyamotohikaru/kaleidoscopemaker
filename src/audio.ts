@@ -17,7 +17,6 @@ export class Sound {
   enabled = true;
   private grind = { gain: null as GainNode | null, rumble: null as GainNode | null, src: null as AudioBufferSourceNode | null, rsrc: null as AudioBufferSourceNode | null, last: 0, acc: 0 };
   private pourNodes: { stop: () => void; set: (x: number) => void } | null = null;
-  private hiss: { g: GainNode; f: BiquadFilterNode } | null = null;
   private lastHit = 0;
   private lastSound = 0;
 
@@ -254,31 +253,6 @@ export class Sound {
       // ビー玉が木の上で鳴る胴の音
       this.tone(t, 190 + Math.random() * 60, 0.045, amp * 0.7, o);
     }
-  }
-
-  // 回しているあいだの粒の流れ（ラメ・粉のさらさら）
-  flow(amount: number) {
-    if (!this.ctx) return;
-    const ctx = this.ctx;
-    if (!this.hiss) {
-      const s = ctx.createBufferSource();
-      s.buffer = this.white;
-      s.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.frequency.value = 5200;
-      f.Q.value = 0.7;
-      const g = ctx.createGain();
-      g.gain.value = 0;
-      s.connect(f).connect(g).connect(this.out(0, 0.4));
-      s.start();
-      this.hiss = { g, f };
-    }
-    // 液の中でラメはいつも少し漂っている。その分（約0.06）は鳴らさず、回したときだけ「さらさら」
-    const k = Math.max(0, amount - 0.09) / 0.12;
-    const a = this.enabled ? Math.min(0.012, k * 0.012) : 0;
-    if (a > 0.0005) this.wake();
-    this.hiss.g.gain.setTargetAtTime(a, ctx.currentTime, 0.12);
   }
 
   // 乳鉢：指の速さで粒の細かさと密度が変わる。progress 0 → 1 で ガリ → ザリ → サラ
