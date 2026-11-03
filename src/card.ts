@@ -62,10 +62,86 @@ interface Theme {
   foil: boolean;
 }
 function themeOf(rank: number): Theme {
-  if (rank >= 6) return { paper: '#13100d', ink: '#ecd29a', sub: 'rgba(236,210,154,.62)', frame: '#c9a35a', seal: 'rgba(214,176,96,.95)', sealChar: '極', sealTilt: -0.05, aged: false, foil: true };
+  if (rank >= 6) return { paper: DARK_PAPER, ink: '#ecd29a', sub: 'rgba(236,210,154,.62)', frame: '#c9a35a', seal: 'rgba(214,176,96,.95)', sealChar: '極', sealTilt: -0.05, aged: false, foil: true };
   if (rank === 5) return { paper: PAPER, ink: INK, sub: 'rgba(29,25,21,.6)', frame: '#b08a42', seal: 'rgba(178,140,64,.95)', sealChar: '鑑', sealTilt: -0.08, aged: false, foil: true };
   if (rank <= 1) return { paper: '#ddd2bc', ink: '#2d2620', sub: 'rgba(45,38,32,.55)', frame: '#8a7a62', seal: 'rgba(110,98,86,.7)', sealChar: '鑑', sealTilt: 0.42, aged: true, foil: false };
   return { paper: PAPER, ink: INK, sub: 'rgba(29,25,21,.6)', frame: BRASS, seal: 'rgba(176,30,36,.85)', sealChar: '鑑', sealTilt: -0.12, aged: false, foil: false };
+}
+
+// 評価の記号：ランク 0〜6 に E〜SS
+export const GRADES = ['E', 'D', 'C', 'B', 'A', 'S', 'SS'];
+const STAMP = "'Cormorant Garamond', 'Noto Serif JP', serif";
+const DARK_PAPER = '#13100d';
+
+function hash(s: string) {
+  let h = 2166136261;
+  for (const ch of s) {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// 評価のスタンプ：ゴム印のように、枠と大きな文字。インクのかすれを少し残す
+function gradeStamp(x: CanvasRenderingContext2D, grade: string, cx: number, cy: number, scale: number, tilt: number, seed: number, ink: string, dark: boolean) {
+  const S = 300;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.strokeStyle = ink;
+  g.fillStyle = ink;
+  g.translate(S / 2, S / 2);
+  // 二重の丸枠
+  g.lineWidth = 9;
+  g.beginPath();
+  g.arc(0, 0, 128, 0, Math.PI * 2);
+  g.stroke();
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(0, 0, 112, 0, Math.PI * 2);
+  g.stroke();
+  // 文字
+  const size = grade.length > 1 ? 128 : 168;
+  // 太字の書体は読み込んでいないので、文字の縁もなぞって太くする
+  g.font = `400 ${size}px ${STAMP}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(grade, 0, 4);
+  g.lineWidth = 7;
+  g.lineJoin = 'round';
+  g.strokeText(grade, 0, 4);
+  g.font = `400 22px ${STAMP}`;
+  g.lineWidth = 1.2;
+  g.fillText('GRADE', 0, -82);
+  g.strokeText('GRADE', 0, -82);
+  g.fillText('KOSUKUMA', 0, 88);
+  g.strokeText('KOSUKUMA', 0, 88);
+  // かすれ：ところどころインクが乗らない
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'destination-out';
+  let r = seed;
+  const rnd = () => ((r = (Math.imul(r, 1664525) + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < 900; i++) {
+    g.globalAlpha = 0.25 + rnd() * 0.6;
+    g.beginPath();
+    g.arc(rnd() * S, rnd() * S, 0.6 + rnd() * 2.2, 0, Math.PI * 2);
+    g.fill();
+  }
+  for (let i = 0; i < 6; i++) {
+    g.globalAlpha = 0.18;
+    g.beginPath();
+    g.ellipse(rnd() * S, rnd() * S, 20 + rnd() * 40, 4 + rnd() * 6, rnd() * 3, 0, Math.PI * 2);
+    g.fill();
+  }
+  x.save();
+  x.translate(cx, cy);
+  x.rotate(tilt);
+  x.scale(scale, scale);
+  x.globalAlpha = 0.9;
+  // 紙の上ではインクが紙に染みるように重ねる。黒漆の紙では重ねると消えるので、そのまま押す
+  if (!dark) x.globalCompositeOperation = 'multiply';
+  x.drawImage(c, -S / 2, -S / 2);
+  x.restore();
 }
 
 function foilCorner(x: CanvasRenderingContext2D, cx: number, cy: number, sx: number, sy: number) {
@@ -193,9 +269,12 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   if (spec) {
     const cx = W / 2;
     const point = (ang: number, k: number): [number, number] => [cx + Math.cos((ang * Math.PI) / 180) * r * k, cy + Math.sin((ang * Math.PI) / 180) * r * k];
-    const lead = (from: [number, number], to: [number, number]) => {
+    // 引き出し線：図の中の点から斜めに出て、注記の手前で水平に折れる（side: 注記が左なら -1、右なら 1）
+    const lead = (from: [number, number], to: [number, number], side: number) => {
+      const pts: [number, number][] = [from, [to[0] - side * 30, to[1]], to];
       x.save();
       x.lineCap = 'round';
+      x.lineJoin = 'round';
       // 画の上でも見えるよう、紙の色で縁取ってから真鍮の線
       for (const [w, col] of [
         [4, T.paper],
@@ -204,8 +283,7 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
         x.strokeStyle = col;
         x.lineWidth = w;
         x.beginPath();
-        x.moveTo(...from);
-        x.lineTo(...to);
+        pts.forEach(([qx, qy], i) => (i ? x.lineTo(qx, qy) : x.moveTo(qx, qy)));
         x.stroke();
       }
       x.fillStyle = T.paper;
@@ -227,7 +305,7 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
     const rx = cx + r + 34; // 右の注記の左端
 
     // 溶液
-    lead(point(200, 0.72), [lx + 8, 372]);
+    lead(point(200, 0.72), [lx + 10, 359], -1);
     note('溶液', lx, 366, 'right');
     x.fillStyle = T.ink;
     x.font = `400 30px ${MIN}`;
@@ -235,7 +313,7 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
     x.fillText(spec.liquid, lx, 410);
 
     // 入れた粒
-    lead(point(150, 0.5), [lx + 8, 552]);
+    lead(point(150, 0.5), [lx + 10, 539], -1);
     note('入れた粒', lx, 546, 'right');
     x.fillStyle = T.ink;
     x.font = `400 30px ${MIN}`;
@@ -244,7 +322,7 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
 
     // 中身：名前と数を1行ずつ。入りきらない分は「ほか n 種」
     const items = spec.items?.length ? spec.items : ['なし'];
-    lead(point(-25, 0.68), [rx - 8, 296]);
+    lead(point(-25, 0.68), [rx - 10, 283], 1);
     note(spec.items?.length ? `中身　${spec.items.length} 種` : '中身', rx, 290, 'left');
     x.fillStyle = T.ink;
     x.textAlign = 'left';
@@ -325,34 +403,17 @@ export async function drawCard(scope: HTMLCanvasElement, name: string, v: Verdic
   x.font = `400 20px ${MIN}`;
   x.fillText('鑑定士　こすくまくん', 306, 1160 + lines.length * 46 + 4 - (lines.length - 1) * 10);
 
-  // 判子
-  x.save();
-  x.translate(W - 170, 1185);
-  x.rotate(T.sealTilt);
-  x.strokeStyle = T.seal;
-  x.fillStyle = T.seal;
-  x.lineWidth = 4;
-  x.beginPath();
-  x.arc(0, 0, 50, 0, Math.PI * 2);
-  x.stroke();
-  x.lineWidth = 1.5;
-  x.beginPath();
-  x.arc(0, 0, 43, 0, Math.PI * 2);
-  x.stroke();
-  x.font = `500 34px ${MIN}`;
-  x.textAlign = 'center';
-  x.fillText(T.sealChar, 0, -2);
-  x.font = `500 15px ${MIN}`;
-  x.fillText('こすくま', 0, 26);
-  x.restore();
+  // 評価のスタンプ：鑑定士の一言の右に、ゴム印のように大きく押す（SS〜E）
+  const hs = hash(name + v.rank);
+  gradeStamp(x, GRADES[v.rank] ?? 'C', W - 220, 1172, 0.74, -0.2 + ((hs % 100) / 100) * 0.24, hs || 7, T.seal, T.paper === DARK_PAPER);
 
   // 日付・ドメイン
   const d = new Date();
   x.fillStyle = T.sub;
   x.font = `400 21px ${LAT}`;
   x.textAlign = 'left';
-  x.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`, 92, H - 82);
+  x.fillText(`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`, 92, H - 64);
   x.textAlign = 'right';
-  x.fillText(domain, W - 92, H - 82);
+  x.fillText(domain, W - 92, H - 64);
   return c;
 }
