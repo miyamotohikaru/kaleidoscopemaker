@@ -224,7 +224,7 @@ body.busy .panel { opacity: 0 !important; pointer-events: none !important; }
 .liquid .vial::after { content: ''; position: absolute; top: 4px; left: 4px; width: 2px; height: 70%; background: rgba(255, 255, 255, 0.35); border-radius: 2px; }
 .liquid b { font-weight: 300; font-size: 14px; }
 .tints { display: flex; justify-content: center; gap: 4px; }
-/* 注いだ量の縦のメーター：筒の左に立てる。目盛りは1分目ごと、七分目だけ明るい真鍮 */
+/* 注いだ量の縦のメーター：筒の左に立てる。目盛りは1分目ごと、目指すなみなみ（いちばん上）だけ明るい真鍮 */
 .vmeter {
   position: fixed; z-index: 3; width: 12px; opacity: 0; pointer-events: none;
   transition: opacity var(--t) var(--ease);
@@ -235,10 +235,10 @@ body[data-stage='fill2']:not(.busy) .vmeter { opacity: 1; }
   background-image: repeating-linear-gradient(to top, transparent 0 calc(10% - 1px), var(--line) calc(10% - 1px) 10%);
 }
 .vm-bar .m-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; opacity: 0.85; transition: height 0.12s linear, background 0.4s var(--ease); }
-.vm-seven { position: absolute; left: -5px; right: -5px; bottom: 70%; height: 2px; background: var(--brass-hi); }
-.vm-top, .vm-seven-label { position: absolute; left: -2px; font-size: 11px; line-height: 1; white-space: nowrap; }
-.vm-top { top: -18px; color: var(--ink-2); }
-.vm-seven-label { left: 18px; color: var(--brass-hi); bottom: calc(70% - 5px); }
+.vm-goal { position: absolute; left: -5px; right: -5px; top: -1px; height: 2px; background: var(--brass-hi); }
+.vm-top, .vm-goal-label { position: absolute; left: -2px; font-size: 11px; line-height: 1.35; white-space: nowrap; }
+.vm-top { top: -20px; color: rgba(240, 160, 138, 0.9); }
+.vm-goal-label { left: 18px; top: -6px; color: var(--brass-hi); }
 .vmeter.over .vm-bar { border-color: rgba(240, 150, 120, 0.9); animation: over 0.9s ease-in-out infinite; }
 @keyframes over { 50% { border-color: rgba(240, 150, 120, 0.25); } }
 .amount { margin-top: 6px; text-align: center; font-size: 12px; color: var(--brass); letter-spacing: 0.2em; min-height: 1.7em; }
@@ -330,6 +330,19 @@ body[data-stage='fill2']:not(.busy) .vmeter { opacity: 1; }
 .act.danger.armed { border-color: rgba(224, 112, 122, 0.6); color: #f0a0a8; }
 .act.danger.armed svg { stroke: #f0a0a8; }
 @media (hover: hover) { .act:hover { border-color: var(--brass); } }
+.cta-ico { width: 18px; height: 18px; margin: -3px 8px 0 0; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+
+/* シェア：下から出る小さな板。どの画面の上にも重ねる */
+.share { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.55); animation: fade 0.25s var(--ease); }
+.share[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.share-panel {
+  width: 100%; max-width: 460px; padding: 4px var(--gut) var(--safe-b);
+  background: #120e0c; border-top: 1px solid rgba(196, 161, 95, 0.4); animation: rise 0.35s var(--ease);
+}
+.share .act { min-height: 76px; font-size: 13px; }
+.share .act svg { width: 24px; height: 24px; }
+.share-note { min-height: 20px; margin-top: 10px; font-size: 12px; color: var(--brass-hi); text-align: center; }
 .minor { display: flex; justify-content: space-between; margin-top: 6px; }
 .minor .link { min-width: 0; text-align: center; }
 
