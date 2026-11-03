@@ -10,6 +10,7 @@ export interface Cert {
   code: string; // 万華鏡の中身（share.ts の形式）
   card: Blob; // 鑑定書（JPEG）
   thumb: Blob; // 一覧用の小さい版
+  thumbW?: number; // 一覧用の幅（古い小さいものは開いたときに作り直す）
 }
 
 const DB = 'kaleidoscope-maker';
@@ -57,14 +58,32 @@ export function toBlob(c: HTMLCanvasElement, type = 'image/jpeg', q = 0.9): Prom
   return new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('blob'))), type, q));
 }
 
-export function thumbOf(card: HTMLCanvasElement, w = 360) {
+// 一覧のカードはスマホで幅 250px ほど（3 倍の画面で 750px）、パソコンで最大 448px（2 倍で 896px）。どちらでもぼやけない幅にする
+export const THUMB_W = 900;
+export function thumbOf(card: HTMLCanvasElement | ImageBitmap, w = THUMB_W) {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = Math.round((card.height / card.width) * w);
   const x = c.getContext('2d')!;
   x.imageSmoothingQuality = 'high';
   x.drawImage(card, 0, 0, c.width, c.height);
-  return toBlob(c, 'image/jpeg', 0.85);
+  return toBlob(c, 'image/jpeg', 0.9);
+}
+
+// 前の版でしまった鑑定書は一覧の絵が小さい（360px）。原寸の鑑定書から作り直して置き換える
+export async function upgradeThumbs(list: Cert[]) {
+  for (const c of list) {
+    if ((c.thumbW ?? 0) >= THUMB_W) continue;
+    try {
+      const bmp = await createImageBitmap(c.card);
+      c.thumb = await thumbOf(bmp);
+      c.thumbW = THUMB_W;
+      bmp.close();
+      await putCert(c);
+    } catch {
+      // 作り直せなければ前の絵のまま
+    }
+  }
 }
 
 export function fmtDate(t: number) {
