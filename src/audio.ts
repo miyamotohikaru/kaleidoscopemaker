@@ -358,15 +358,21 @@ export class Sound {
     const s = ctx.createBufferSource();
     s.buffer = this.white;
     s.loop = true;
+    // 流れる音の下地は低い「ちょろちょろ」だけにする。白い雑音の高いところが「シュー」と聞こえるので、
+    // 2段のローパスで高い音を落とし、小さくする（主役は泡の「とくとく」）
     const bp = ctx.createBiquadFilter();
-    bp.type = 'bandpass';
-    bp.frequency.value = 900 - thick * 550;
-    bp.Q.value = 0.9;
+    bp.type = 'lowpass';
+    bp.frequency.value = 700 - thick * 350;
+    bp.Q.value = 0.7;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 1100;
+    lp.Q.value = 0.5;
     const g = ctx.createGain();
     const t0 = ctx.currentTime;
     g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(0.07 - thick * 0.03, t0 + 0.25);
-    s.connect(bp).connect(g).connect(o);
+    g.gain.linearRampToValueAtTime(0.045 - thick * 0.02, t0 + 0.25);
+    s.connect(bp).connect(lp).connect(g).connect(o);
     s.start();
     let alive = true;
     const rate = 14 - thick * 10;
@@ -382,7 +388,7 @@ export class Sound {
       g.gain.setTargetAtTime(0, ctx.currentTime, 0.12);
       setTimeout(() => s.stop(), 600);
     };
-    this.pourNodes = { stop, set: (x) => bp.frequency.setTargetAtTime((900 - thick * 550) * (0.7 + x * 0.5), ctx.currentTime, 0.2) };
+    this.pourNodes = { stop, set: (x) => bp.frequency.setTargetAtTime((700 - thick * 350) * (0.7 + x * 0.5), ctx.currentTime, 0.2) };
     setTimeout(stop, dur * 1000);
   }
 
