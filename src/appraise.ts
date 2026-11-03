@@ -144,7 +144,8 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
     ['cloud', cell.cloud],
     ['murk', cell.murk],
     ['smudge', cell.smudge],
-    ['air', air > 0.3 ? air : 0],
+    // なみなみが目安。空気が残っているぶん、泡が見えるぶんだけ少しずつ下がる
+    ['air', air],
     ['packed', n >= 40 ? (n - 36) / 12 : 0],
     ['spill', Math.min(1, cell.spill * 2.5)],
   ];

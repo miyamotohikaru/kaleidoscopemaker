@@ -460,7 +460,7 @@ $('#liquids').addEventListener('click', (e) => {
   const L = LIQUIDS[i];
   cell.liquid = L;
   sound.tick();
-  say(cell.levelTarget > 0.02 ? 'まぜるの？　……いいけど。' : '筒の上を、長押しして注いで。');
+  say(cell.levelTarget > 0.02 ? 'まぜるの？　……いいけど。' : '筒の上を長押しして、なみなみまで。');
   setNext();
 });
 $('#tints').addEventListener('click', (e) => {
@@ -481,10 +481,10 @@ function updateAmount() {
   const c = cell.tint.map((x) => Math.round(255 * Math.pow(Math.min(1, x), 1 / 2.2)));
   f.style.background = `rgb(${c.join(',')})`;
   $('#vmeter').classList.toggle('over', cell.spill > 0);
-  if (l < 0.03) el.textContent = '筒の上を長押しすると、注げます';
+  if (l < 0.03) el.textContent = '筒の上を長押しして、なみなみまで注ぐ';
   else if (cell.spill > 0) el.textContent = 'あふれてる';
-  else if (l >= 0.995) el.textContent = 'なみなみ';
-  else el.textContent = `いま ${KANJI[Math.max(1, Math.min(9, Math.round(l * 10)))]}分目`;
+  else if (l >= 0.995) el.textContent = 'なみなみ　ちょうどいい';
+  else el.textContent = `いま ${KANJI[Math.max(1, Math.min(9, Math.round(l * 10)))]}分目　少ないと泡が入る`;
 }
 
 // ---------- 鏡の数 ----------
@@ -824,11 +824,17 @@ canvas.addEventListener('pointermove', (e) => {
   drag.last = a;
   drag.t = now;
 });
+// なみなみの手前で止めたら、最初の一回だけ泡のことを言う
+let airHinted = false;
 function stopPour() {
   if (!pour.on) return;
   pour.on = false;
   sound.pourStop();
   setNext();
+  if (!airHinted && cell.liquid && cell.levelTarget > 0.05 && cell.levelTarget < 0.97) {
+    airHinted = true;
+    say('まだ空気がある。……泡、入るよ。');
+  }
 }
 const release = (e: PointerEvent) => {
   if (grab.b && e.pointerId === grab.id) {
@@ -1455,7 +1461,7 @@ function frame(now: number) {
         sound.spill(L.id);
         spillTick = 0.18 + Math.random() * 0.14;
       }
-    } else if (cell.levelTarget >= 1) say('なみなみ。');
+    } else if (cell.levelTarget >= 1) say('なみなみ。……そこで止めて。');
     updateAmount();
   }
   // 物理（120Hz）
