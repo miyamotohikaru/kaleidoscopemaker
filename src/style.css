@@ -330,6 +330,19 @@ body[data-stage='fill2']:not(.busy) .vmeter { opacity: 1; }
 .act.danger.armed { border-color: rgba(224, 112, 122, 0.6); color: #f0a0a8; }
 .act.danger.armed svg { stroke: #f0a0a8; }
 @media (hover: hover) { .act:hover { border-color: var(--brass); } }
+.cta-ico { width: 18px; height: 18px; margin: -3px 8px 0 0; vertical-align: middle; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+
+/* シェア：下から出る小さな板。どの画面の上にも重ねる */
+.share { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; justify-content: center; background: rgba(0, 0, 0, 0.55); animation: fade 0.25s var(--ease); }
+.share[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.share-panel {
+  width: 100%; max-width: 460px; padding: 4px var(--gut) var(--safe-b);
+  background: #120e0c; border-top: 1px solid rgba(196, 161, 95, 0.4); animation: rise 0.35s var(--ease);
+}
+.share .act { min-height: 76px; font-size: 13px; }
+.share .act svg { width: 24px; height: 24px; }
+.share-note { min-height: 20px; margin-top: 10px; font-size: 12px; color: var(--brass-hi); text-align: center; }
 .minor { display: flex; justify-content: space-between; margin-top: 6px; }
 .minor .link { min-width: 0; text-align: center; }
 

@@ -1005,11 +1005,61 @@ function closeAppraisal() {
   kuma?.stop();
 }
 
-function postX(name: string, code: string) {
-  const url = `${location.origin}${location.pathname}#k=${code}`;
-  const text = `「${name}」をのぞきました。\n#万華鏡メーカー`;
-  window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, '_blank', 'noopener');
+// シェア：リンクのコピー・X・LINE から選ぶ
+let shareFor: { name: string; code: string } | null = null;
+function shareText(name: string) {
+  return `「${name}」をのぞきました。\n#万華鏡メーカー`;
 }
+function shareUrl(code: string) {
+  return `${location.origin}${location.pathname}#k=${code}`;
+}
+function openShare(name: string, code: string) {
+  shareFor = { name, code };
+  sound.tick();
+  $('#share-note').textContent = '';
+  $('#share').hidden = false;
+}
+function closeShare() {
+  $('#share').hidden = true;
+}
+$('#share-close').addEventListener('click', closeShare);
+$('#share').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeShare();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !$('#share').hidden) closeShare();
+});
+$('#share-copy').addEventListener('click', async () => {
+  if (!shareFor) return;
+  const all = `${shareText(shareFor.name)}\n${shareUrl(shareFor.code)}`;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(all);
+    ok = true;
+  } catch {
+    // 古いブラウザ：見えない入力欄に入れてコピー
+    const t = document.createElement('textarea');
+    t.value = all;
+    t.setAttribute('readonly', '');
+    t.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(t);
+    t.select();
+    ok = document.execCommand('copy');
+    t.remove();
+  }
+  sound.tick();
+  $('#share-note').textContent = ok ? 'リンクをコピーしました。' : 'コピーできませんでした。';
+});
+$('#share-x').addEventListener('click', () => {
+  if (!shareFor) return;
+  window.open(`https://x.com/intent/post?text=${encodeURIComponent(shareText(shareFor.name))}&url=${encodeURIComponent(shareUrl(shareFor.code))}`, '_blank', 'noopener');
+  closeShare();
+});
+$('#share-line').addEventListener('click', () => {
+  if (!shareFor) return;
+  window.open(`https://line.me/R/share?text=${encodeURIComponent(`${shareText(shareFor.name)}\n${shareUrl(shareFor.code)}`)}`, '_blank', 'noopener');
+  closeShare();
+});
 async function saveImage(blob: Blob, name: string) {
   const file = new File([blob], `${name || 'kaleidoscope'}.${blob.type === 'image/png' ? 'png' : 'jpg'}`, { type: blob.type });
   const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
@@ -1027,7 +1077,7 @@ async function saveImage(blob: Blob, name: string) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-$('#post').addEventListener('click', () => postX(lastName, lastCode));
+$('#post').addEventListener('click', () => openShare(lastName, lastCode));
 $('#save').addEventListener('click', async () => {
   if (lastCard) saveImage(await toBlob(lastCard, 'image/png'), lastName);
 });
@@ -1111,7 +1161,7 @@ $('#detail-back').addEventListener('click', () => {
   $('#arch-detail').hidden = true;
 });
 $('#detail-save').addEventListener('click', () => current && saveImage(current.card, current.name));
-$('#detail-post').addEventListener('click', () => current && postX(current.name, current.code));
+$('#detail-post').addEventListener('click', () => current && openShare(current.name, current.code));
 $('#detail-del').addEventListener('click', async () => {
   const b = $('#detail-del');
   if (!current) return;

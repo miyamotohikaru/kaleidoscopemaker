@@ -31,6 +31,15 @@ const FAIL_LINES: Record<string, string> = {
   spill: 'あふれてる。\n……筒の外、べたべた。',
 };
 
+// 油と混ざらなかった液は、実際に入れたものの名前で言う（はちみつと油なのに「水と油」と言わない）
+function cloudLine(cell: Cell) {
+  const w = cell.poured.has('water');
+  const h = cell.poured.has('honey');
+  if (h && !w) return '……はちみつと油、\n混ざらないんだよ。';
+  if (h && w) return '……水も、はちみつも、\n油とは混ざらないんだよ。';
+  return FAIL_LINES.cloud;
+}
+
 // 映った万華鏡の画像から測る
 export interface Look {
   lit: number; // はっきり見えている面積（暗いガラスの筋や、ぼんやりした光は数えない）
@@ -154,12 +163,13 @@ export function appraise(cell: Cell, mirrors: number, tint: string, name: string
   let line = pool[(h >>> 10) % pool.length];
   if (hasCharm && rank >= 3 && (h >>> 4) % 3 === 0) line = CHARM_LINE;
   // 低いときは、理由がわかる一言
-  if (rank <= 2 && fail) line = FAIL_LINES[fail];
+  const failLine = fail === 'cloud' ? cloudLine(cell) : fail ? FAIL_LINES[fail] : '';
+  if (rank <= 2 && fail) line = failLine;
   // 茶色っぽさで点が伸びなかったときは、直し方がわかる一言
   else if (rank <= 3 && look.brown > 0.3) line = BROWN_LINE;
   if (rank <= 1) {
     if (empty) line = EMPTY_LINE;
-    else if (fail) line = FAIL_LINES[fail];
+    else if (fail) line = failLine;
     else if (dark) line = DARK_LINE;
     else if (look.brown > 0.3) line = BROWN_LINE;
     else if (look.white > 0.3) line = WHITE_LINE;
